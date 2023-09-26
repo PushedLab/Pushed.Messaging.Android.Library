@@ -53,3 +53,17 @@ dependencies {
     androidTestImplementation 'androidx.test.espresso:espresso-core:3.5.1'
     implementation 'com.squareup.okhttp3:okhttp:3.11.0'
 }
+
+afterEvaluate {
+    publishing {
+        publications {
+            // Creates a Maven publication called "release".
+            release(MavenPublication) {
+                from components.release
+                groupId = 'com.github.PushedLab'
+                artifactId = 'messaginglibrary'
+                version = '1.0'
+            }
+        }
+    }
+}
