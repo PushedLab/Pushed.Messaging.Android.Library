@@ -5,6 +5,7 @@ import android.app.Service
 import android.content.Context
 import android.content.Intent
 import android.content.SharedPreferences
+import android.content.pm.ServiceInfo.FOREGROUND_SERVICE_TYPE_REMOTE_MESSAGING
 import android.os.Build
 import android.os.IBinder
 import android.util.Log
@@ -81,6 +82,10 @@ open class BackgroundService : Service(){
                 .setVisibility(NotificationCompat.VISIBILITY_SECRET)
                 .setContentIntent(pi)
             startForeground(101,mBuilder.build())
+            if (Build.VERSION.SDK_INT < Build.VERSION_CODES.TIRAMISU) {
+                startForeground(101, mBuilder.build());
+            } else startForeground(101, mBuilder.build(), FOREGROUND_SERVICE_TYPE_REMOTE_MESSAGING);
+
 
         }
 
@@ -90,7 +95,6 @@ open class BackgroundService : Service(){
     override fun onDestroy() {
         if(Build.VERSION.SDK_INT>=Build.VERSION_CODES.N)
             stopForeground(STOP_FOREGROUND_REMOVE)
-        else stopForeground(foreground)
         messageListener?.disconnect()
         messageListener=null
         super.onDestroy()

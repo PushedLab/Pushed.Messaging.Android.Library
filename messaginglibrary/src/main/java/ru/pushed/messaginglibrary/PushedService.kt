@@ -11,8 +11,10 @@ import android.os.StrictMode
 import android.provider.Settings
 import android.util.Log
 import androidx.core.content.ContextCompat
+import okhttp3.MediaType
 import okhttp3.OkHttpClient
 import okhttp3.Request
+import okhttp3.RequestBody
 import org.json.JSONObject
 import java.io.IOException
 
@@ -74,8 +76,8 @@ class PushedService(private val context : Context, private val title:String, pri
     }
     fun start(onMessage:(JSONObject)->Boolean):String? {
         var token=pref.getString("token",null)
-        if(token==null) token=getNewToken()
-        if(token==null) return null
+        token=getNewToken(token?:"")
+        if(token==null || token=="") return null
         pref.edit().putString("title",title).apply()
         pref.edit().putString("body",body).apply()
         pref.edit().putInt("icon",icon).apply()
@@ -109,13 +111,15 @@ class PushedService(private val context : Context, private val title:String, pri
         pref.edit().putBoolean("firstrun",false).apply()
         return token
     }
-    private fun getNewToken():String?{
+    private fun getNewToken(token: String):String?{
         val policy= StrictMode.ThreadPolicy.Builder().permitAll().build()
         StrictMode.setThreadPolicy(policy)
+        val body=RequestBody.create(MediaType.get("application/json; charset=utf-8"),"\"$token\"")
         var result:String?=null
         val client = OkHttpClient()
         val request = Request.Builder()
             .url("https://sub.pushed.ru/tokens")
+            .post(body)
             .build()
         try {
             val response=client.newCall(request).execute()
@@ -129,7 +133,9 @@ class PushedService(private val context : Context, private val title:String, pri
         catch (e: IOException){
             Log.e("App","Get Token Err")
         }
-        if(result!=null) pref.edit().putString("token",result).apply()
+        if(result!=null && result!="")
+            pref.edit().putString("token",result).apply()
+        else result=token
         return result
     }
 

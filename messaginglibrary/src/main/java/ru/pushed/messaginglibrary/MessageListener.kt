@@ -6,6 +6,7 @@ import android.util.Log
 import okhttp3.*
 import okio.ByteString
 import org.json.JSONObject
+import java.nio.charset.Charset
 import java.util.concurrent.TimeUnit
 
 class MessageListener (private val url : String, context: Context, val listener: (JSONObject)->Unit) : WebSocketListener(){
@@ -52,7 +53,13 @@ class MessageListener (private val url : String, context: Context, val listener:
         lock()
         val message=bytes.utf8()
         Log.d(tag,"onMessage: $message")
-        if(message!="ONLINE") listener(JSONObject(message))
+        if(message!="ONLINE") {
+            val payLoad=JSONObject(message)
+            val responce=JSONObject()
+            responce.put("messageId",payLoad["messageId"])
+            activeWebSocket?.send(ByteString.encodeString(responce.toString(),Charsets.UTF_8))
+            listener(payLoad)
+        }
         Thread.sleep(3000)
         unLock()
     }

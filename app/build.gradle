@@ -5,14 +5,14 @@ plugins {
 
 android {
     namespace 'ru.pushed.pushedexample'
-    compileSdk 32
+    compileSdk 34
 
     defaultConfig {
         applicationId "ru.pushed.pushedexample"
         minSdk 21
-        targetSdk 32
+        targetSdk 34
         versionCode 1
-        versionName "1.0"
+        versionName "1.1"
 
         testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
     }

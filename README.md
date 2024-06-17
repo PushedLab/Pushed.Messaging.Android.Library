@@ -40,12 +40,14 @@ class MyBackgroundService:BackgroundService() {
 **Step 4.** Add the following to your app's AndroidManifest.xml
 
 ```xml
+    <uses-permission android:name="android.permission.USE_EXACT_ALARM"/>
     <application>
     ...
         <service
             android:enabled="true"
             android:exported="true"
             android:name=".MyBackgroundService"
+            android:foregroundServiceType="remoteMessaging"
             android:stopWithTask="false" />
     ...
     </application>
