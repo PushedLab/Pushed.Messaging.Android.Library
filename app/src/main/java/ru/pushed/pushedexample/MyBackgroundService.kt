@@ -8,16 +8,20 @@ import ru.pushed.messaginglibrary.BackgroundService
 
 class MyBackgroundService:BackgroundService() {
     override fun onBackgroundMessage(message: JSONObject) {
-        Log.d("Mybackground","MyBackground message: $message")
-        val builder = NotificationCompat.Builder(this, "messages").apply {
-            setSmallIcon(ru.pushed.messaginglibrary.R.mipmap.ic_bg_service_small)
-            setContentTitle(message["title"].toString())
-            setContentText(message["body"].toString())
-            setPriority(NotificationCompat.PRIORITY_DEFAULT)
+        Log.d("Mybackground", "MyBackground message: $message")
+        try {
+            val data = message["data"] as JSONObject
+            val builder = NotificationCompat.Builder(this, "messages").apply {
+                setSmallIcon(ru.pushed.messaginglibrary.R.mipmap.ic_bg_service_small)
+                setContentTitle(data["title"].toString())
+                setContentText(data["body"].toString())
+                setPriority(NotificationCompat.PRIORITY_DEFAULT)
+            }
+            with(NotificationManagerCompat.from(this)) {
+                notify(111, builder.build())
+            }
         }
-        with(NotificationManagerCompat.from(this)) {
-            notify(111, builder.build())
-        }
+        catch (e :Exception) {}
 
     }
 }

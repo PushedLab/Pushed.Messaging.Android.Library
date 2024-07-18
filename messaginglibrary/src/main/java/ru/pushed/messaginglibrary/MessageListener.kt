@@ -58,6 +58,12 @@ class MessageListener (private val url : String, context: Context, val listener:
             val responce=JSONObject()
             responce.put("messageId",payLoad["messageId"])
             activeWebSocket?.send(ByteString.encodeString(responce.toString(),Charsets.UTF_8))
+            try {
+                payLoad.put("data",JSONObject(payLoad["data"].toString()))
+            }
+            catch(e: Exception) {
+                Log.d(tag,"Data is String")
+            }
             listener(payLoad)
         }
         Thread.sleep(3000)

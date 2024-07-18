@@ -114,7 +114,7 @@ class PushedService(private val context : Context, private val title:String, pri
     private fun getNewToken(token: String):String?{
         val policy= StrictMode.ThreadPolicy.Builder().permitAll().build()
         StrictMode.setThreadPolicy(policy)
-        val body=RequestBody.create(MediaType.get("application/json; charset=utf-8"),"\"$token\"")
+        val body=RequestBody.create(MediaType.get("application/json; charset=utf-8"),"{\"clientToken\": \"$token\"}")
         var result:String?=null
         val client = OkHttpClient()
         val request = Request.Builder()

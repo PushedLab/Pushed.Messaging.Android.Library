@@ -15,6 +15,7 @@ import android.widget.Button
 import android.widget.TextView
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.core.content.ContextCompat
+import org.json.JSONObject
 import ru.pushed.messaginglibrary.BackgroundService
 import ru.pushed.messaginglibrary.PushedService
 
@@ -36,9 +37,10 @@ class MainActivity : AppCompatActivity() {
         super.onResume()
         token=pushedService.start(){message ->
             try {
+                val data=message["data"] as JSONObject
                 runOnUiThread{
-                    titleText.text=message["title"].toString()
-                    bodyText.text=message["body"].toString()
+                    titleText.text=data["title"].toString()
+                    bodyText.text=data["body"].toString()
                 }
                 true
             }

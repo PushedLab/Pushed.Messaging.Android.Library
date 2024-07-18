@@ -19,8 +19,8 @@ class WatchdogReceiver: BroadcastReceiver() {
         lateinit var cls:Class<*>
     }
     fun enqueue(context: Context){
-        enqueue(context,3600000)
-        //enqueue(context,60000)
+        enqueue(context,900000)
+
     }
     private fun enqueue(context:Context, millis:Int){
         cls=context::class.java
@@ -33,8 +33,7 @@ class WatchdogReceiver: BroadcastReceiver() {
             flags = flags or PendingIntent.FLAG_MUTABLE
         }
         val pIntent = PendingIntent.getBroadcast(context, QUEUE_REQUEST_ID, intent, flags)
-        AlarmManagerCompat.setExact(manager, AlarmManager.RTC_WAKEUP, System.currentTimeMillis() + millis, pIntent)
-
+        manager.set(AlarmManager.RTC_WAKEUP,System.currentTimeMillis() + millis, pIntent)
     }
 
     override fun onReceive(context: Context?, intent: Intent?) {
