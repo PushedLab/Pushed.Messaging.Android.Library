@@ -40,7 +40,6 @@ class MyBackgroundService:BackgroundService() {
 **Step 4.** Add the following to your app's AndroidManifest.xml
 
 ```xml
-    <uses-permission android:name="android.permission.USE_EXACT_ALARM"/>
     <application>
     ...
         <service
