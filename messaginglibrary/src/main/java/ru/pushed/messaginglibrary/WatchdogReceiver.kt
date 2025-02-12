@@ -9,23 +9,20 @@ import android.content.Intent
 import android.os.Build
 import android.os.Build.VERSION.SDK_INT
 import android.util.Log
-import androidx.core.app.AlarmManagerCompat
 import androidx.core.content.ContextCompat
 
 class WatchdogReceiver: BroadcastReceiver() {
     private val QUEUE_REQUEST_ID = 111
     private val ACTION_RESPAWN = "pushed.background_service.RESPAWN"
-    companion object {
-        lateinit var cls:Class<*>
-    }
+
     fun enqueue(context: Context){
         enqueue(context,900000)
 
     }
-    private fun enqueue(context:Context, millis:Int){
-        cls=context::class.java
+    fun enqueue(context:Context, millis:Int){
+
         val intent = Intent(context, WatchdogReceiver::class.java)
-        intent.setAction(ACTION_RESPAWN)
+        intent.action = ACTION_RESPAWN
         val manager = context.getSystemService(ALARM_SERVICE) as AlarmManager
 
         var flags = PendingIntent.FLAG_UPDATE_CURRENT
@@ -37,13 +34,25 @@ class WatchdogReceiver: BroadcastReceiver() {
     }
 
     override fun onReceive(context: Context?, intent: Intent?) {
-        Log.d("WatchDog","Restart")
+        Log.d("WatchDog","Alarm:${BackgroundService.active}")
+        PushedService.addLogEvent(context,"Alarm:${BackgroundService.active}")
         if(intent?.action==ACTION_RESPAWN){
             val pref=context?.getSharedPreferences("Pushed", Context.MODE_PRIVATE)
-            if(pref?.getBoolean("foreground",false)==true){
-                ContextCompat.startForegroundService(context, Intent(context, cls))
+            try{
+                context?.startService(Intent(context, BackgroundService::class.java))
+                if(!BackgroundService.active) pref?.edit()?.putBoolean("restarted",true)?.apply()
+                PushedService.addLogEvent(context,"Alarm start service")
             }
-            else context?.startService(Intent(context, cls))
+            catch (e: Exception){
+                PushedService.addLogEvent(context,"Alarm Err:${e.message}")
+                if(!BackgroundService.active){
+                    pref?.edit()?.putBoolean("restarted",false)?.apply()
+                    if(PushedJobService.startMyJob(context!!,3000,5000,1))
+                        PushedService.addLogEvent(context,"Sheduled")
+                }
+
+            }
+
         }
 
     }

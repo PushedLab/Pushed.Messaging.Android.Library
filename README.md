@@ -23,16 +23,16 @@ allprojects {
 
 ```gradle
     dependencies {
-	implementation 'com.github.PushedLab:Pushed.Messaging.Android.Library:1.2.0'
+	implementation 'com.github.PushedLab:Pushed.Messaging.Android.Library:1.3.0'
     }
 ``` 
 
-**Step 3.** Create your own Class extends BackgroundService class and override onBackgroundMessage(JSONObject) 
+**Step 3.** Create your own Class extends MessageReceiver class and override onBackgroundMessage(Context?,JSONObject) 
 for handle messages even when your application is not running.
 
 ```kotlin
-class MyBackgroundService:BackgroundService() {
-    override fun onBackgroundMessage(message: JSONObject) {
+class MyMessageReceiver : MessageReceiver() {
+    override fun onBackgroundMessage(context: Context?,message: JSONObject) {
         Log.d("Mybackground","MyBackground message: $message")
     }
 ```
@@ -42,30 +42,106 @@ class MyBackgroundService:BackgroundService() {
 ```xml
     <application>
     ...
-        <service
+        <receiver
+            android:name=".MyMessageReceiver"
             android:enabled="true"
-            android:exported="true"
-            android:name=".MyBackgroundService"
-            android:foregroundServiceType="remoteMessaging"
-            android:stopWithTask="false" />
+            android:exported="true">
+            <intent-filter>
+                <action android:name="ru.pushed.action.MESSAGE" />
+            </intent-filter>
+        </receiver>
     ...
     </application>
 ```
+
+For support Fcm, you must follow these steps:
+
+**Step 1.** Add it in your root build.gradle add this dependencies 
+
+```gradle
+buildscript {
+...
+    dependencies {
+        classpath 'com.google.gms:google-services:4.4.2'
+        ...
+    }
+}
+
+```
+
+**Step 2.** Place your google-services.json in Android/app folder
+
+**Step 3.** Add it in your app/build.gradle add this plugins 
+
+```gradle
+...
+apply plugin: 'com.google.gms.google-services'
+```
+
+For support Hpk, you must follow these steps:
+
+**Step 1.** Add it in your root build.gradle add this 
+
+```gradle
+buildscript {
+...
+    repositories {
+        ...
+        maven { url 'https://developer.huawei.com/repo/' }
+    }
+    dependencies {
+        classpath 'com.huawei.agconnect:agcp:1.9.1.300'
+        ...
+    }
+}
+allprojects {
+    repositories {
+        ...
+        maven { url 'https://developer.huawei.com/repo/' }
+    }
+}
+
+```
+
+**Step 2.** Place your agconnect-services.json in Android/app folder
+
+**Step 3.** Add it in your app/build.gradle add this 
+
+```gradle
+...
+dependencies {
+    ...
+    implementation 'com.huawei.hms:push:6.12.0.300'
+}
+...
+apply plugin: 'com.huawei.agconnect' 
+```
+
+On Android, to support RuStore, you need to add the following to your AndroidManifest.xml
+
+```xml
+    <application>
+    ...
+        <meta-data
+            android:name="ru.rustore.sdk.pushclient.project_id"
+            android:value="Your RuStore project ID" />
+    ...
+    </application>
+```
+
 
 ### Implementation
 
 For init library you need create instace of PushedService 
 
 ```kotlin
-        pushedService= PushedService(this,"Pushed","Service is active",
-            ru.pushed.messaginglibrary.R.mipmap.ic_bg_service_small,MyBackgroundService::class.java)
+        pushedService= PushedService(this,MyMessageReceiver::class.java)
 ```
 
 ```kotlin
 // context - Context
-// title,body,icon - params of service notification
-// backgroundServiceClass - your own BackgroundService class
-PushedService(private val context : Context, private val title:String, private val body:String, private val icon:Int, private val backgroundServiceClass: Class<*>);
+// messageReceiverClass - your own messageReceiverClass class
+PushedService(private val context : Context, messageReceiverClass: Class<*>?);
 
 ```
 

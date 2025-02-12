@@ -5,7 +5,7 @@
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS"/>
 
     <application
-        android:allowBackup="true"
+        android:allowBackup="false"
         android:dataExtractionRules="@xml/data_extraction_rules"
         android:fullBackupContent="@xml/backup_rules"
         android:icon="@mipmap/ic_launcher"
@@ -27,12 +27,14 @@
                 android:name="android.app.lib_name"
                 android:value="" />
         </activity>
-        <service
+        <receiver
+            android:name=".MyMessageReceiver"
             android:enabled="true"
-            android:exported="true"
-            android:name=".MyBackgroundService"
-            android:foregroundServiceType="remoteMessaging"
-            android:stopWithTask="false" />
+            android:exported="true">
+            <intent-filter>
+                <action android:name="ru.pushed.action.MESSAGE" />
+            </intent-filter>
+        </receiver>
     </application>
 
 </manifest>

@@ -21,41 +21,23 @@ class Connectivity(private val _context: Context): BroadcastReceiver() {
         get() {
             return getStatus()
         }
-    @Suppress("DEPRECATION")
     private fun getStatus():Status {
-        if(Build.VERSION.SDK_INT>= Build.VERSION_CODES.M) {
-            val network= connectivityManager.activeNetwork
-            val capabilities=connectivityManager.getNetworkCapabilities(network)
-            if (capabilities != null) {
-                when {
-                    capabilities.hasTransport(NetworkCapabilities.TRANSPORT_WIFI) -> return Status.WIFI
-                    capabilities.hasTransport(NetworkCapabilities.TRANSPORT_ETHERNET) -> return Status.ETHERNET
-                    capabilities.hasTransport(NetworkCapabilities.TRANSPORT_VPN) -> return Status.VPN
-                    capabilities.hasTransport(NetworkCapabilities.TRANSPORT_CELLULAR) -> return Status.MOBILE
-                    capabilities.hasTransport(NetworkCapabilities.TRANSPORT_BLUETOOTH) -> return Status.BLUETOOTH
-                }
-            }
-        }
-        else {
-            val info=connectivityManager.activeNetworkInfo
-            if (info != null) {
-                when(info.type){
-                    ConnectivityManager.TYPE_BLUETOOTH-> return Status.BLUETOOTH
-                    ConnectivityManager.TYPE_ETHERNET-> return Status.ETHERNET
-                    ConnectivityManager.TYPE_WIFI-> return Status.WIFI
-                    ConnectivityManager.TYPE_WIMAX-> return Status.WIFI
-                    ConnectivityManager.TYPE_VPN-> return Status.VPN
-                    ConnectivityManager.TYPE_MOBILE-> return Status.MOBILE
-                    ConnectivityManager.TYPE_MOBILE_DUN-> return Status.MOBILE
-                    ConnectivityManager.TYPE_MOBILE_HIPRI-> return Status.MOBILE
-                }
+        val network= connectivityManager.activeNetwork
+        val capabilities=connectivityManager.getNetworkCapabilities(network)
+        if (capabilities != null) {
+            when {
+                capabilities.hasTransport(NetworkCapabilities.TRANSPORT_WIFI) -> return Status.WIFI
+                capabilities.hasTransport(NetworkCapabilities.TRANSPORT_ETHERNET) -> return Status.ETHERNET
+                capabilities.hasTransport(NetworkCapabilities.TRANSPORT_VPN) -> return Status.VPN
+                capabilities.hasTransport(NetworkCapabilities.TRANSPORT_CELLULAR) -> return Status.MOBILE
+                capabilities.hasTransport(NetworkCapabilities.TRANSPORT_BLUETOOTH) -> return Status.BLUETOOTH
             }
         }
 
         return Status.NONE
     }
-    private fun baseListener(_status:Status) {
-        Log.d(tag,"Connection: $_status")
+    private fun baseListener(status:Status) {
+        Log.d(tag,"Connection: $status")
     }
     fun setListener(_listener:(Status)->Unit) {
         listener=_listener

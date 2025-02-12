@@ -36,6 +36,7 @@ class MainActivity : AppCompatActivity() {
     override fun onResume() {
         super.onResume()
         token=pushedService.start(){message ->
+            PushedService.addLogEvent(this ,"DEMO FG: $message")
             try {
                 val data=message["data"] as JSONObject
                 runOnUiThread{
@@ -48,7 +49,7 @@ class MainActivity : AppCompatActivity() {
 
         }
         tokenText.text="Token: $token"
-        Log.d("App","Token: $token")
+        PushedService.addLogEvent(this ,"Token: $token")
 
     }
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -69,8 +70,7 @@ class MainActivity : AppCompatActivity() {
                 requestPermissions(arrayOf(Manifest.permission.POST_NOTIFICATIONS), 1);
             }
         }
-        pushedService= PushedService(this,"Pushed","Service is active",
-            ru.pushed.messaginglibrary.R.mipmap.ic_bg_service_small,MyBackgroundService::class.java)
+        pushedService= PushedService(this,MyMessageReceiver::class.java)
 
         restartButton.setOnClickListener{
             var myClipboard = getSystemService(CLIPBOARD_SERVICE) as ClipboardManager

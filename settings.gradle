@@ -11,6 +11,9 @@ dependencyResolutionManagement {
         google()
         mavenCentral()
         maven { url "https://jitpack.io" }
+        maven { url "https://artifactory-external.vkpartner.ru/artifactory/maven"}
+        maven { url "https://developer.huawei.com/repo/"}
+
     }
 }
 rootProject.name = "Pushed example"

@@ -9,12 +9,10 @@ import android.content.pm.ServiceInfo.FOREGROUND_SERVICE_TYPE_REMOTE_MESSAGING
 import android.os.Build
 import android.os.IBinder
 import android.util.Log
-import androidx.annotation.RequiresApi
 import androidx.core.app.NotificationCompat
 import org.json.JSONObject
 
 open class BackgroundService : Service(){
-    val ACTION_RESPAWN = "pushed.background_service.RESPAWN"
     private val tag="BackgroundService"
     private lateinit var pref: SharedPreferences
     private var foreground: Boolean = false
@@ -41,7 +39,9 @@ open class BackgroundService : Service(){
         }
 
     }
-
+    companion object {
+        var active=false
+    }
     override fun onBind(intent: Intent?): IBinder? {
         val binderId=intent?.getIntExtra("binder_id",0)?:0
         Log.d(tag,"On bind: $binderId")
@@ -59,35 +59,11 @@ open class BackgroundService : Service(){
         return super.onUnbind(intent)
     }
 
+
     override fun onCreate() {
         super.onCreate()
         Log.d(tag,"On Create")
         pref=getSharedPreferences("Pushed", Context.MODE_PRIVATE)
-        foreground=pref.getBoolean("foreground",false)
-        Log.d(tag,"Fore: $foreground")
-        if(foreground) {
-            val packageName=applicationContext.packageName
-            val i = packageManager.getLaunchIntentForPackage(packageName)
-            var flags= PendingIntent.FLAG_CANCEL_CURRENT
-            if(Build.VERSION.SDK_INT>=Build.VERSION_CODES.S)
-                flags = flags or PendingIntent.FLAG_MUTABLE
-            val pi= PendingIntent.getActivity(this,11,i,flags)
-            val mBuilder= NotificationCompat.Builder(this,"pushed")
-                .setAutoCancel(true)
-                .setSmallIcon(pref.getInt("icon",R.mipmap.ic_bg_service_small))
-                .setOngoing(false)
-                .setContentTitle(pref.getString("title","Pushed"))
-                .setContentText(pref.getString("body","The service is active"))
-                .setCategory("")
-                .setVisibility(NotificationCompat.VISIBILITY_SECRET)
-                .setContentIntent(pi)
-            startForeground(101,mBuilder.build())
-            if (Build.VERSION.SDK_INT < Build.VERSION_CODES.TIRAMISU) {
-                startForeground(101, mBuilder.build());
-            } else startForeground(101, mBuilder.build(), FOREGROUND_SERVICE_TYPE_REMOTE_MESSAGING);
-
-
-        }
 
     }
 
@@ -97,35 +73,56 @@ open class BackgroundService : Service(){
             stopForeground(STOP_FOREGROUND_REMOVE)
         messageListener?.disconnect()
         messageListener=null
+        active=false
+        watchdogReceiver.enqueue(this,5000)
         super.onDestroy()
+    }
+
+    override fun onTaskRemoved(rootIntent: Intent?) {
+        messageListener?.disconnect()
+        messageListener=null
+        active=false
+        watchdogReceiver.enqueue(this,5000)
+        super.onTaskRemoved(rootIntent)
     }
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         Log.d(tag,"ON Start")
+        PushedService.addLogEvent(this,"Start service")
+        active=true
         watchdogReceiver.enqueue(this)
         if(messageListener!=null){
             Log.d(tag,"Service already started")
+            PushedService.addLogEvent(this,"Service already started")
             messageListener?.disconnect()
             return START_STICKY
         }
         token=pref.getString("token",null)
         Log.d(tag,"Token: $token")
         if(token!=null){
-            pref.edit().putString("token",token).apply()
-            messageListener=MessageListener("wss://sub.pushed.ru/v1/$token",this){message->
-                var sended=false
-                synchronized(listeners){
-                    if(listeners.size>0)
-                        for(key in listeners.keys)
-                            if(listeners[key]?.invoke(message.toString()) != false) sended=true
+            messageListener=MessageListener("wss://sub.pushed.ru/v2/open-websocket/$token",this){message->
+                if(message["messageId"]!=pref.getString("lastmessage","")){
+                    pref.edit().putString("lastmessage",message["messageId"].toString()).apply()
+                    var sent=false
+                    synchronized(listeners){
+                        if(listeners.isNotEmpty())
+                            for(key in listeners.keys)
+                                if(listeners[key]?.invoke(message.toString()) != false) sent=true
+                    }
+                    if(!sent) onBackgroundMessage(message)
                 }
-                if(!sended) onBackgroundMessage(message)
             }
         }
         return START_STICKY
     }
     open fun onBackgroundMessage(message: JSONObject){
         Log.d(tag,"Background message: $message")
+        val listenerClassName= pref.getString("listenerclass",null) ?: return
+        val intent = Intent(applicationContext, Class.forName(listenerClassName))
+        intent.action = "ru.pushed.action.MESSAGE"
+        intent.putExtra("message",message.toString())
+        sendBroadcast(intent)
     }
+
     fun receiveData(data : JSONObject) {
         Log.d(tag,"Receive: $data")
         if(data["method"]=="restart") messageListener?.disconnect()
