@@ -17,11 +17,12 @@ class FcmService : FirebaseMessagingService(){
 
     override fun onMessageReceived(message: RemoteMessage) {
         val pref=getSharedPreferences("Pushed", Context.MODE_PRIVATE)
-        PushedService.addLogEvent(this, "Fcm Message: $message")
+        PushedService.addLogEvent(this, "Fcm Message: ${message.data}")
         val pushedMessage= JSONObject()
         val fcmData=message.data
         val traceId=fcmData["mfTraceId"]
         val messageId=fcmData["messageId"]
+        val notification=fcmData["pushedNotification"]
         try {
             pushedMessage.put("data",JSONObject(fcmData["data"].toString()))
         }
@@ -33,6 +34,8 @@ class FcmService : FirebaseMessagingService(){
             pushedMessage.put("messageId",messageId)
         if(traceId!=null)
             pushedMessage.put("mfTraceId",traceId)
+        if(notification!=null)
+            pushedMessage.put("pushedNotification",notification)
         PushedService.addLogEvent(this, "Fcm PushedMessage: $pushedMessage")
         if(messageId!=null && messageId!=pref.getString("lastmessage","")){
             pref.edit().putString("lastmessage",messageId).apply()
@@ -42,6 +45,8 @@ class FcmService : FirebaseMessagingService(){
             }
             else{
                 val listenerClassName = pref.getString("listenerclass",null)
+                if(notification!=null)
+                    PushedService.showNotification(this, JSONObject(notification))
                 if(listenerClassName!=null){
                     val intent = Intent(applicationContext, Class.forName(listenerClassName))
                     intent.action = "ru.pushed.action.MESSAGE"

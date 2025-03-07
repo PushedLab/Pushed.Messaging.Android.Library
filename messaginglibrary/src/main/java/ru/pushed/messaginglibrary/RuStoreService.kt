@@ -11,11 +11,12 @@ class RuStoreService: RuStoreMessagingService(){
     private val tag="RuStoreService"
     override fun onMessageReceived(message: RemoteMessage) {
         val pref=getSharedPreferences("Pushed", Context.MODE_PRIVATE)
-        PushedService.addLogEvent(this, "RuStore Message: $message")
+        PushedService.addLogEvent(this, "RuStore Message: ${message.data}")
         val pushedMessage= JSONObject()
         val ruStoreData=message.data
         val traceId=ruStoreData["mfTraceId"]
         val messageId=ruStoreData["messageId"]
+        val notification=ruStoreData["pushedNotification"]
         try {
             pushedMessage.put("data", JSONObject(ruStoreData["data"].toString()))
         }
@@ -27,6 +28,9 @@ class RuStoreService: RuStoreMessagingService(){
             pushedMessage.put("messageId",messageId)
         if(traceId!=null)
             pushedMessage.put("mfTraceId",traceId)
+        if(notification!=null)
+            pushedMessage.put("pushedNotification",notification)
+
         PushedService.addLogEvent(this, "RuStore PushedMessage: $pushedMessage")
         if(messageId!=null && messageId!=pref.getString("lastmessage","")){
             pref.edit().putString("lastmessage",messageId).apply()
@@ -36,6 +40,8 @@ class RuStoreService: RuStoreMessagingService(){
             }
             else{
                 val listenerClassName = pref.getString("listenerclass",null)
+                if(notification!=null)
+                    PushedService.showNotification(this,JSONObject(notification))
                 if(listenerClassName!=null){
                     val intent = Intent(applicationContext, Class.forName(listenerClassName))
                     intent.action = "ru.pushed.action.MESSAGE"

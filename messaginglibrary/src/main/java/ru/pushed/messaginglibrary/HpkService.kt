@@ -14,7 +14,8 @@ class HpkService : HmsMessageService(){
         super.onMessageReceived(message)
         val hpkData=message?.dataOfMap
         val pref=getSharedPreferences("Pushed", Context.MODE_PRIVATE)
-        PushedService.addLogEvent(this, "Hpk Message: $message")
+        PushedService.addLogEvent(this, "Hpk Message: $hpkData")
+        val notification=hpkData?.get("pushedNotification")
         val pushedMessage= JSONObject()
         val traceId= hpkData?.get("mfTraceId")
         val messageId=hpkData?.get("messageId")
@@ -29,6 +30,8 @@ class HpkService : HmsMessageService(){
             pushedMessage.put("messageId",messageId)
         if(traceId!=null)
             pushedMessage.put("mfTraceId",traceId)
+        if(notification!=null)
+            pushedMessage.put("pushedNotification",notification)
         PushedService.addLogEvent(this, "Hpk PushedMessage: $pushedMessage")
         if(messageId!=null && messageId!=pref.getString("lastmessage","")){
             pref.edit().putString("lastmessage",messageId).apply()
@@ -38,6 +41,8 @@ class HpkService : HmsMessageService(){
             }
             else{
                 val listenerClassName = pref.getString("listenerclass",null)
+                if(notification!=null)
+                    PushedService.showNotification(this,JSONObject(notification))
                 if(listenerClassName!=null){
                     val intent = Intent(applicationContext, Class.forName(listenerClassName))
                     intent.action = "ru.pushed.action.MESSAGE"

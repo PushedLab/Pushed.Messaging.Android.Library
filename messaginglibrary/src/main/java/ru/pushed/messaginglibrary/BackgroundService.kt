@@ -1,30 +1,29 @@
 package ru.pushed.messaginglibrary
 
-import android.app.PendingIntent
+
 import android.app.Service
 import android.content.Context
 import android.content.Intent
 import android.content.SharedPreferences
-import android.content.pm.ServiceInfo.FOREGROUND_SERVICE_TYPE_REMOTE_MESSAGING
 import android.os.Build
 import android.os.IBinder
 import android.util.Log
-import androidx.core.app.NotificationCompat
 import org.json.JSONObject
 
 open class BackgroundService : Service(){
     private val tag="BackgroundService"
     private lateinit var pref: SharedPreferences
-    private var foreground: Boolean = false
     private var token:String?=null
     private val watchdogReceiver=WatchdogReceiver()
     private var messageListener:MessageListener?=null
+    private var status:Status=Status.NOTACTIVE
     val listeners= mutableMapOf<Int,IBackgroundService?>()
     private val binder: IBackgroundServiceBinder.Stub = object : IBackgroundServiceBinder.Stub() {
         override fun bind(id: Int, service: IBackgroundService?) {
             Log.d(tag,"Bind: $id")
             synchronized(listeners) {
-                listeners.put(id,service)
+                listeners[id] = service
+                service?.invoke("{\"ServiceStatus\":${status.name}}")
             }
         }
         override fun unbind(id: Int) {
@@ -100,7 +99,18 @@ open class BackgroundService : Service(){
         Log.d(tag,"Token: $token")
         if(token!=null){
             messageListener=MessageListener("wss://sub.pushed.ru/v2/open-websocket/$token",this){message->
-                if(message["messageId"]!=pref.getString("lastmessage","")){
+                if(message.has("ServiceStatus")){
+                    if(status!= Status.valueOf(message.getString("ServiceStatus"))){
+                        status=Status.valueOf(message.getString("ServiceStatus"))
+                        synchronized(listeners){
+                            if(listeners.isNotEmpty())
+                                for(key in listeners.keys)
+                                    listeners[key]?.invoke("{\"ServiceStatus\":${status.name}}")
+                        }
+
+                    }
+                }
+                else if(message["messageId"]!=pref.getString("lastmessage","")){
                     pref.edit().putString("lastmessage",message["messageId"].toString()).apply()
                     var sent=false
                     synchronized(listeners){
@@ -116,6 +126,14 @@ open class BackgroundService : Service(){
     }
     open fun onBackgroundMessage(message: JSONObject){
         Log.d(tag,"Background message: $message")
+        try{
+            val notification=JSONObject(message["pushedNotification"].toString())
+            PushedService.showNotification(this,notification )
+        }
+        catch (e:Exception){
+            PushedService.addLogEvent(this,"Notification error: ${e.message}")
+            e.printStackTrace()
+        }
         val listenerClassName= pref.getString("listenerclass",null) ?: return
         val intent = Intent(applicationContext, Class.forName(listenerClassName))
         intent.action = "ru.pushed.action.MESSAGE"
@@ -125,7 +143,7 @@ open class BackgroundService : Service(){
 
     fun receiveData(data : JSONObject) {
         Log.d(tag,"Receive: $data")
-        if(data["method"]=="restart") messageListener?.disconnect()
+        if(data["method"]=="restart") messageListener?.disconnect(forceDisconnect = true)
     }
 
 }

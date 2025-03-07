@@ -10,7 +10,7 @@ import android.content.Intent
 import android.content.SharedPreferences
 import android.os.Build
 import android.util.Log
-import androidx.core.content.ContextCompat
+import org.json.JSONObject
 
 
 class PushedJobService : JobService(){
@@ -86,14 +86,23 @@ class PushedJobService : JobService(){
         if(token!=null){
             messageListener=MessageListener("wss://sub.pushed.ru/v2/open-websocket/$token",this){message->
                 Log.d(tag,"Job Background message: $message")
-                if(message["messageId"]!=pref.getString("lastmessage","")){
-                    pref.edit().putString("lastmessage",message["messageId"].toString()).apply()
-                    val listenerClassName= pref.getString("listenerclass",null)
-                    if(listenerClassName!=null){
-                        val intent = Intent(applicationContext, Class.forName(listenerClassName))
-                        intent.action = "ru.pushed.action.MESSAGE"
-                        intent.putExtra("message",message.toString())
-                        sendBroadcast(intent)
+                if(!message.has("ServiceStatus")){
+                    if(message["messageId"]!=pref.getString("lastmessage","")){
+                        pref.edit().putString("lastmessage",message["messageId"].toString()).apply()
+                        try{
+                            val notification= JSONObject(message["pushedNotification"].toString())
+                            PushedService.showNotification(this,notification )
+                        }
+                        catch (e:Exception){
+                            PushedService.addLogEvent(this,"Notification error: ${e.message}")
+                        }
+                        val listenerClassName= pref.getString("listenerclass",null)
+                        if(listenerClassName!=null){
+                            val intent = Intent(applicationContext, Class.forName(listenerClassName))
+                            intent.action = "ru.pushed.action.MESSAGE"
+                            intent.putExtra("message",message.toString())
+                            sendBroadcast(intent)
+                        }
                     }
                 }
             }
@@ -103,6 +112,7 @@ class PushedJobService : JobService(){
     }
 
     override fun onStopJob(jobParams: JobParameters?): Boolean {
+        PushedService.addLogEvent(this,"Start Job")
         if(activeService==this) activeService=null
         Log.d(tag, "Stop Job")
         messageListener?.disconnect(true)

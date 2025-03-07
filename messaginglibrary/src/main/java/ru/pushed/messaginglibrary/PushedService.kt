@@ -1,20 +1,33 @@
 package ru.pushed.messaginglibrary
 
+import android.Manifest
+import android.app.Activity
 import android.app.ActivityManager
 import android.app.ActivityManager.RunningAppProcessInfo
 import android.app.KeyguardManager
+import android.app.NotificationChannel
+import android.app.NotificationManager
+import android.app.PendingIntent
 import android.content.ComponentName
 import android.content.Context
 import android.content.Intent
 import android.content.ServiceConnection
 import android.content.SharedPreferences
+import android.content.pm.PackageManager
+import android.graphics.Bitmap
+import android.graphics.BitmapFactory
 import android.net.Uri
+import android.os.Build
 import android.os.IBinder
 import android.os.PowerManager
 import android.os.StrictMode
 import android.provider.Settings
 import android.util.Base64
 import android.util.Log
+import androidx.core.app.NotificationCompat
+import androidx.core.app.NotificationManagerCompat
+import androidx.core.content.ContextCompat
+import androidx.core.content.edit
 import androidx.lifecycle.Observer
 import com.google.firebase.messaging.FirebaseMessaging
 import com.huawei.hms.aaid.HmsInstanceId
@@ -30,20 +43,26 @@ import org.json.JSONArray
 import org.json.JSONObject
 import ru.rustore.sdk.pushclient.RuStorePushClient
 import java.io.IOException
+import java.net.HttpURLConnection
+import java.net.URL
 import java.util.Calendar
 
-
-class PushedService(private val context : Context, messageReceiverClass: Class<*>?) {
+enum class Status(val value: Int){
+    ACTIVE(0),OFFLINE(1),NOTACTIVE(2)
+}
+class PushedService(private val context : Context, messageReceiverClass: Class<*>?, channel:String?="messages",enableLogger:Boolean=false) {
     private val tag="Pushed Service"
     private val pref: SharedPreferences =context.getSharedPreferences("Pushed",Context.MODE_PRIVATE)
     private var  serviceBinder: IBackgroundServiceBinder?=null
     private var messageHandler: ((JSONObject) -> Boolean)?=null
+    private var statusHandler: ((Status) -> Unit)?=null
+    private var sheduled=false
     var mShouldUnbind=false
     private var fcmToken:String?=null
     private var hpkToken:String?=null
     private var ruStoreToken:String?=null
-
-    public var pushedToken:String?=null
+    var status:Status=Status.NOTACTIVE
+    var pushedToken:String?=null
 
 
     private val messageLiveData=MessageLiveData.getInstance()
@@ -84,16 +103,94 @@ class PushedService(private val context : Context, messageReceiverClass: Class<*
 
     }
     companion object{
+        private fun getBitmap(context: Context,uri:String?): Bitmap?{
+            if(uri=="null") return null
+            var bigIconRes=context.resources.getIdentifier(uri,"mipmap",context.packageName)
+            if(bigIconRes==0)
+                bigIconRes=context.resources.getIdentifier(uri,"drawable",context.packageName)
+            if(bigIconRes!=0) return BitmapFactory.decodeResource(context.resources,bigIconRes)
+            var bitmap: Bitmap?=null
+            try {
+                val url = URL(uri)
+                val connection =
+                    url.openConnection() as HttpURLConnection
+                connection.doInput = true
+                connection.connect()
+                val stream = connection.inputStream
+                bitmap = BitmapFactory.decodeStream(stream)
+                Log.d("DemoApp", "Res: ${bitmap?.density}")
+            }
+            catch (e:Exception){
+                addLogEvent(context, "Get Bitmap Error: ${e.message}")
+            }
+            return bitmap
+        }
+        fun showNotification(context: Context,pushedNotification: JSONObject){
+            addLogEvent(context ,"Notification: $pushedNotification")
+            val sp =context.getSharedPreferences("Pushed",Context.MODE_PRIVATE)
+            val channel= sp.getString("channel",null) ?: return
+            val id=sp.getInt("pushId",0)+1
+            val body=(pushedNotification["Body"].toString())
+            if(body=="null") return
+            var iconRes=context.resources.getIdentifier(pushedNotification["Logo"].toString(),"mipmap",context.packageName)
+            if(iconRes==0)
+                iconRes=context.resources.getIdentifier(pushedNotification["Logo"].toString(),"drawable",context.packageName)
+            if(iconRes==0)
+                iconRes=context.applicationInfo.icon
+            if(iconRes==0) return
+            val bitmap= getBitmap(context,pushedNotification["Image"].toString())
+            var intent=context.packageManager.getLaunchIntentForPackage(context.packageName)
+            try{
+                if(pushedNotification["Url"].toString() !="null"){
+                    intent=Intent(Intent.ACTION_VIEW, Uri.parse(pushedNotification["Url"].toString()))
+                    intent.flags = Intent.FLAG_ACTIVITY_SINGLE_TOP
+                }
+            } catch (e:Exception){
+                intent=context.packageManager.getLaunchIntentForPackage(context.packageName)
+            }
+            val flags = PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+            val pendingIntent = PendingIntent.getActivity(context, 0, intent, flags)
+            var title=""
+            if(pushedNotification["Title"].toString()!="null")
+                title=pushedNotification.getString("Title")
+            try {
+                val builder = NotificationCompat.Builder(context, channel).apply {
+                    setSmallIcon(iconRes)
+                    setContentTitle(title)
+                    setContentText(body)
+                    setAutoCancel(true)
+                    setContentIntent(pendingIntent)
+                    priority = NotificationCompat.PRIORITY_MAX
+                    if(bitmap!=null){
+                        setLargeIcon(bitmap)
+                        setStyle(NotificationCompat.BigPictureStyle()
+                            .bigPicture(bitmap)
+                            .bigLargeIcon(null))
+                    }
+                }
+                with(NotificationManagerCompat.from(context)) {
+                    notify(id, builder.build())
+                }
+                sp.edit().putInt("pushId",id).apply()
+            }
+            catch (e:SecurityException) {
+                addLogEvent(context ,"Notify Security Error: ${e.message}")
+            }
+            catch (e:Exception) {
+                addLogEvent(context ,"Notify Error: ${e.message}")
+            }
+
+        }
+
+
         fun addLogEvent(context: Context? ,event:String){
-            if(BuildConfig.DEBUG) {
-                val sp = context?.getSharedPreferences("Pushed", Context.MODE_PRIVATE)
-                if (sp != null) {
+            val sp = context?.getSharedPreferences("Pushed", Context.MODE_PRIVATE)
+            if(sp?.getBoolean("enablelogger",false)==true) {
                     val date: String = Calendar.getInstance().time.toString()
                     val fEvent = "$date: $event\n"
                     Log.d("PushedLogger", fEvent)
                     val log = sp.getString("log", "")
                     sp.edit().putString("log", log + fEvent).apply()
-                }
             }
         }
         fun getLog(context: Context? ):String{
@@ -103,6 +200,7 @@ class PushedService(private val context : Context, messageReceiverClass: Class<*
         }
         fun confirmDelivered(context: Context? ,messageId :String,transport:String,traceId:String){
             val sp =context?.getSharedPreferences("Pushed",Context.MODE_PRIVATE)
+            addLogEvent(context,"Confirm: $messageId/$transport")
             val token: String = sp?.getString("token",null) ?: return
             val basicAuth = "Basic ${Base64.encodeToString("$token:$messageId".toByteArray(),Base64.NO_WRAP)}"
             val body="".toRequestBody("application/json; charset=utf-8".toMediaType())
@@ -157,18 +255,49 @@ class PushedService(private val context : Context, messageReceiverClass: Class<*
         pushedToken=getNewToken()
         addLogEvent(context,"Pushed Token: $pushedToken")
         if(pushedToken!=null){
+            status=Status.OFFLINE
             pref.edit().putString("listenerclass",messageReceiverClass?.name).apply()
+            pref.edit().putString("channel",channel).apply()
+            pref.edit().putBoolean("enablelogger",enableLogger).apply()
             val firstRun=pref.getBoolean("firstrun", true)
+            val battaryIntent= Intent()
+            battaryIntent.action = Settings.ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS
+            battaryIntent.data = Uri.parse("package:${context.packageName}")
+            if(channel!=null){
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                    val notificationChannel= NotificationChannel(channel,"Messages", NotificationManager.IMPORTANCE_HIGH)
+                    val notificationManager=context.getSystemService(NotificationManager::class.java)
+                    notificationManager.createNotificationChannel(notificationChannel)
+                }
+                if(firstRun)
+                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+                        if (ContextCompat.checkSelfPermission(context,
+                                Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED) {
+                            (context as Activity).requestPermissions(arrayOf(Manifest.permission.POST_NOTIFICATIONS), 1)
+                        }
+                    }
+            }
             val pm=context.getSystemService(Context.POWER_SERVICE) as PowerManager
             if(!pm.isIgnoringBatteryOptimizations(context.packageName) && firstRun) {
-                val intent= Intent()
-                intent.action = Settings.ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS
-                intent.data = Uri.parse("package:${context.packageName}")
-                context.startActivity(intent)
+                context.startActivity(battaryIntent)
             }
             pref.edit().putBoolean("firstrun",false).apply()
             messageObserver = Observer<JSONObject> { message: JSONObject? ->
-                messageHandler?.invoke(message!!)
+                if(messageHandler==null || messageHandler?.invoke(message!!)==false){
+                    try{
+                        val notification=JSONObject(message!!["pushedNotification"].toString())
+                        showNotification(context,notification )
+                    }
+                    catch (e:Exception){
+                        addLogEvent(context,"Notification error: ${e.message}")
+                    }
+                    if(messageReceiverClass!=null){
+                        val intent = Intent(context, messageReceiverClass)
+                        intent.action = "ru.pushed.action.MESSAGE"
+                        intent.putExtra("message",message.toString())
+                        context.sendBroadcast(intent)
+                    }
+                }
             }
             messageLiveData?.observeForever(messageObserver!!)
             //Fcm
@@ -229,7 +358,11 @@ class PushedService(private val context : Context, messageReceiverClass: Class<*
             }
         }
     }
+    fun setStatusHandler(handler: (Status)->Unit){
+        statusHandler=handler
+    }
     fun unbindService(){
+        messageHandler=null
         if(mShouldUnbind){
             mShouldUnbind=false
             context.unbindService(serviceConnection)
@@ -241,18 +374,31 @@ class PushedService(private val context : Context, messageReceiverClass: Class<*
     }
     fun receiveData(data:JSONObject): Boolean{
 
-        Log.d(tag,"Message Service($binderId): $data")
-        return messageHandler?.invoke(data)?:false
+        addLogEvent(context,"Message Service($binderId): $data")
+        if(data.has("ServiceStatus")){
+            if(status!= Status.valueOf(data.getString("ServiceStatus"))){
+                status=Status.valueOf(data.getString("ServiceStatus"))
+                addLogEvent(context,"Status changed: $status")
+                statusHandler?.invoke(status)
+
+            }
+
+        }
+        else return messageHandler?.invoke(data)?:false
+        return true
 
     }
-    fun start(onMessage:(JSONObject)->Boolean):String? {
+    fun start(onMessage:((JSONObject)->Boolean)?):String? {
         if(pushedToken==null) return null
         messageHandler=onMessage
         val serviceIntent=Intent(context,BackgroundService::class.java)
         serviceIntent.putExtra("binder_id", binderId)
         context.startService(serviceIntent)
         mShouldUnbind=context.bindService(serviceIntent,serviceConnection,Context.BIND_AUTO_CREATE)
-        PushedJobService.startMyJob(context,3000,5000,1)
+        if(!sheduled){
+            sheduled=true
+            PushedJobService.startMyJob(context,3000,5000,1)
+        }
         pref.edit().putBoolean("restarted",false).apply()
         return pushedToken
     }

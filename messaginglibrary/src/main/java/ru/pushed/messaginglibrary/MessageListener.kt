@@ -8,6 +8,7 @@ import okhttp3.*
 import okio.ByteString
 import okio.ByteString.Companion.encode
 import org.json.JSONObject
+import java.util.Calendar
 import java.util.concurrent.TimeUnit
 
 class MessageListener (private val url : String, private val context: Context, val listener: (JSONObject)->Unit) : WebSocketListener(){
@@ -21,7 +22,8 @@ class MessageListener (private val url : String, private val context: Context, v
     private var active=false
     private val connectivity = Connectivity(context)
     private var needReconnect=true
-
+    private var retryCount=0
+    private var lastConnected:Long=0
     init {
 
         val mgr=context.getSystemService(Context.POWER_SERVICE) as PowerManager
@@ -50,9 +52,15 @@ class MessageListener (private val url : String, private val context: Context, v
             .build()
         client.newWebSocket(request,this)
     }
-    fun disconnect(dontReconnect :Boolean = false){
+    fun disconnect(dontReconnect :Boolean = false,forceDisconnect:Boolean = false){
         needReconnect=!dontReconnect
-        activeWebSocket?.cancel()
+        if(activeWebSocket==null && needReconnect) connect()
+        else if(!forceDisconnect && Calendar.getInstance().timeInMillis-lastConnected<300000) {
+            PushedService.addLogEvent(context,"Reconnect postponed")
+            return
+        }
+        else activeWebSocket?.cancel()
+
     }
 
     override fun onMessage(webSocket: WebSocket, bytes: ByteString) {
@@ -60,7 +68,7 @@ class MessageListener (private val url : String, private val context: Context, v
         val message=bytes.utf8()
         Log.d(tag,"onMessage: $message")
         PushedService.addLogEvent(context,"onMessage: $message")
-
+        listener(JSONObject("{\"ServiceStatus\":\"ACTIVE\"}"))
         if(message!="ONLINE") {
             val payLoad=JSONObject(message)
             val response=JSONObject()
@@ -82,8 +90,9 @@ class MessageListener (private val url : String, private val context: Context, v
     override fun onOpen(webSocket: WebSocket, response: Response) {
         Log.d(tag,"webSocked Open")
         PushedService.addLogEvent(context,"webSocked Open")
-
         activeWebSocket=webSocket
+        retryCount=0
+        lastConnected=Calendar.getInstance().timeInMillis
     }
 
     override fun onClosing(webSocket: WebSocket, code: Int, reason: String) {
@@ -98,11 +107,13 @@ class MessageListener (private val url : String, private val context: Context, v
         lock()
         Log.d(tag,"Err: ${t.message}")
         PushedService.addLogEvent(context,"Err: ${t.message}")
-
-
+        listener(JSONObject("{\"ServiceStatus\":\"OFFLINE\"}"))
         activeWebSocket=null
         active=false
-        Thread.sleep(1000)
+        retryCount++
+        lastConnected=0
+        Thread.sleep(retryCount*1000L)
+        if(retryCount>=10) needReconnect=false
         if(needReconnect) connect()
     }
     private fun lock(){
