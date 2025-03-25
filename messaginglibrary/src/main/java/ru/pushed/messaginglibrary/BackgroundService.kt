@@ -13,6 +13,8 @@ import org.json.JSONObject
 open class BackgroundService : Service(){
     private val tag="BackgroundService"
     private lateinit var pref: SharedPreferences
+    private lateinit var secretPref: SharedPreferences
+
     private var token:String?=null
     private val watchdogReceiver=WatchdogReceiver()
     private var messageListener:MessageListener?=null
@@ -63,6 +65,7 @@ open class BackgroundService : Service(){
         super.onCreate()
         Log.d(tag,"On Create")
         pref=getSharedPreferences("Pushed", Context.MODE_PRIVATE)
+        secretPref=PushedService.getSecure(this)
 
     }
 
@@ -70,7 +73,8 @@ open class BackgroundService : Service(){
     override fun onDestroy() {
         if(Build.VERSION.SDK_INT>=Build.VERSION_CODES.N)
             stopForeground(STOP_FOREGROUND_REMOVE)
-        messageListener?.disconnect()
+        messageListener?.deactivate()
+
         messageListener=null
         active=false
         watchdogReceiver.enqueue(this,5000)
@@ -78,7 +82,7 @@ open class BackgroundService : Service(){
     }
 
     override fun onTaskRemoved(rootIntent: Intent?) {
-        messageListener?.disconnect()
+        messageListener?.deactivate()
         messageListener=null
         active=false
         watchdogReceiver.enqueue(this,5000)
@@ -87,15 +91,16 @@ open class BackgroundService : Service(){
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         Log.d(tag,"ON Start")
         PushedService.addLogEvent(this,"Start service")
+        val restarted = pref.getBoolean("restarted", false)
         active=true
-        watchdogReceiver.enqueue(this)
+        watchdogReceiver.enqueue(this,if(restarted)900000 else 15000)
         if(messageListener!=null){
             Log.d(tag,"Service already started")
             PushedService.addLogEvent(this,"Service already started")
             messageListener?.disconnect()
             return START_STICKY
         }
-        token=pref.getString("token",null)
+        token=secretPref.getString("token",null)
         Log.d(tag,"Token: $token")
         if(token!=null){
             messageListener=MessageListener("wss://sub.pushed.ru/v2/open-websocket/$token",this){message->

@@ -27,8 +27,9 @@ import android.util.Log
 import androidx.core.app.NotificationCompat
 import androidx.core.app.NotificationManagerCompat
 import androidx.core.content.ContextCompat
-import androidx.core.content.edit
 import androidx.lifecycle.Observer
+import androidx.security.crypto.EncryptedSharedPreferences
+import androidx.security.crypto.MasterKey
 import com.google.firebase.messaging.FirebaseMessaging
 import com.huawei.hms.aaid.HmsInstanceId
 import com.huawei.hms.api.HuaweiApiAvailability
@@ -53,7 +54,8 @@ enum class Status(val value: Int){
 class PushedService(private val context : Context, messageReceiverClass: Class<*>?, channel:String?="messages",enableLogger:Boolean=false) {
     private val tag="Pushed Service"
     private val pref: SharedPreferences =context.getSharedPreferences("Pushed",Context.MODE_PRIVATE)
-    private var  serviceBinder: IBackgroundServiceBinder?=null
+    private val secretPref: SharedPreferences = getSecure(context)
+    private var serviceBinder: IBackgroundServiceBinder?=null
     private var messageHandler: ((JSONObject) -> Boolean)?=null
     private var statusHandler: ((Status) -> Unit)?=null
     private var sheduled=false
@@ -103,6 +105,19 @@ class PushedService(private val context : Context, messageReceiverClass: Class<*
 
     }
     companion object{
+        fun getSecure(context: Context):SharedPreferences{
+            val masterKey: MasterKey = MasterKey.Builder(context)
+                .setKeyScheme(MasterKey.KeyScheme.AES256_GCM)
+                .build()
+            return EncryptedSharedPreferences.create(
+                context,
+                "SecretPushed",
+                masterKey,
+                EncryptedSharedPreferences.PrefKeyEncryptionScheme.AES256_SIV,
+                EncryptedSharedPreferences.PrefValueEncryptionScheme.AES256_GCM
+            )
+
+        }
         private fun getBitmap(context: Context,uri:String?): Bitmap?{
             if(uri=="null") return null
             var bigIconRes=context.resources.getIdentifier(uri,"mipmap",context.packageName)
@@ -248,10 +263,10 @@ class PushedService(private val context : Context, messageReceiverClass: Class<*
 
     }
     init{
-        pushedToken=pref.getString("token",null)
-        fcmToken=pref.getString("fcmtoken",null)
-        ruStoreToken=pref.getString("rustoretoken",null)
-        hpkToken=pref.getString("hpktoken",null)
+        pushedToken=secretPref.getString("token",null)
+        fcmToken=secretPref.getString("fcmtoken",null)
+        ruStoreToken=secretPref.getString("rustoretoken",null)
+        hpkToken=secretPref.getString("hpktoken",null)
         pushedToken=getNewToken()
         addLogEvent(context,"Pushed Token: $pushedToken")
         if(pushedToken!=null){
@@ -397,7 +412,11 @@ class PushedService(private val context : Context, messageReceiverClass: Class<*
         mShouldUnbind=context.bindService(serviceIntent,serviceConnection,Context.BIND_AUTO_CREATE)
         if(!sheduled){
             sheduled=true
-            PushedJobService.startMyJob(context,3000,5000,1)
+            PushedJobIntentService.deactivateJob()
+            val jobIntent = Intent(context, PushedJobIntentService::class.java)
+            PushedJobIntentService.enqueueWork(context, jobIntent)
+            //PushedJobService.stopActiveJob(context)
+            //PushedJobService.startMyJob(context,3000,5000,1)
         }
         pref.edit().putBoolean("restarted",false).apply()
         return pushedToken
@@ -441,10 +460,10 @@ class PushedService(private val context : Context, messageReceiverClass: Class<*
             addLogEvent(context,"Get Token Err: ${e.message}")
         }
         if(result!=null && result!=""){
-            pref.edit().putString("token",result).apply()
-            if(fcmToken!=null) pref.edit().putString("fcmtoken",fcmToken).apply()
-            if(hpkToken!=null) pref.edit().putString("hpktoken",hpkToken).apply()
-            if(ruStoreToken!=null) pref.edit().putString("rustoretoken",ruStoreToken).apply()
+            secretPref.edit().putString("token",result).apply()
+            if(fcmToken!=null) secretPref.edit().putString("fcmtoken",fcmToken).apply()
+            if(hpkToken!=null) secretPref.edit().putString("hpktoken",hpkToken).apply()
+            if(ruStoreToken!=null) secretPref.edit().putString("rustoretoken",ruStoreToken).apply()
             pushedToken=result
         }
         else result=pushedToken

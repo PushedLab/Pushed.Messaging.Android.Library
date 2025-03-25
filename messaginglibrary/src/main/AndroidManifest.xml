@@ -15,7 +15,7 @@
             android:name=".BackgroundService"
             android:stopWithTask="false" />
         <service
-            android:name=".PushedJobService"
+            android:name=".PushedJobIntentService"
             android:enabled="true"
             android:exported="true"
             android:stopWithTask="false"

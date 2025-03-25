@@ -4,7 +4,7 @@ plugins {
     id 'maven-publish'
 }
 group = 'com.github.PushedLab'
-version = '1.4.0'
+version = '1.4.1'
 
 android {
     namespace 'ru.pushed.messaginglibrary'
@@ -51,10 +51,12 @@ dependencies {
     testImplementation 'junit:junit:4.13.2'
     androidTestImplementation 'androidx.test.ext:junit:1.1.5'
     androidTestImplementation 'androidx.test.espresso:espresso-core:3.5.1'
+    implementation 'androidx.security:security-crypto-ktx:1.1.0-alpha06'
     implementation 'com.squareup.okhttp3:okhttp:4.10.0'
     implementation 'com.google.firebase:firebase-messaging:24.1.0'
     implementation 'ru.rustore.sdk:pushclient:6.3.0'
     implementation 'com.huawei.hms:push:6.12.0.300'
+
 
 
 }
@@ -67,7 +69,7 @@ afterEvaluate {
                 from components.release
                 groupId = 'com.github.PushedLab'
                 artifactId = 'messaginglibrary'
-                version = '1.4.0'
+                version = '1.4.1'
             }
         }
     }

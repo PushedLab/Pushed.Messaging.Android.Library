@@ -11,7 +11,7 @@ import org.json.JSONObject
 import java.util.Calendar
 import java.util.concurrent.TimeUnit
 
-class MessageListener (private val url : String, private val context: Context, val listener: (JSONObject)->Unit) : WebSocketListener(){
+class MessageListener (private val url : String, private val context: Context, var listener: (JSONObject)->Unit) : WebSocketListener(){
     private val tag="MessageListener"
     private val client: OkHttpClient = OkHttpClient.Builder()
         .readTimeout(0,  TimeUnit.MILLISECONDS)
@@ -20,6 +20,7 @@ class MessageListener (private val url : String, private val context: Context, v
     private var activeWebSocket: WebSocket?=null
     private var connected = false
     private var active=false
+    private var connectivityActive=true
     private val connectivity = Connectivity(context)
     private var needReconnect=true
     private var retryCount=0
@@ -31,14 +32,18 @@ class MessageListener (private val url : String, private val context: Context, v
         wakeLock?.setReferenceCounted(true)
         lock()
         connectivity.setListener {
-            Log.d(tag,"Connectivity: $it")
-            PushedService.addLogEvent(context,"Connectivity: $it")
-            if(it==Connectivity.Status.WIFI) disconnect()
-            connected = it != Connectivity.Status.NONE
-            connect()
+            if(connectivityActive){
+                Log.d(tag,"Connectivity: $it")
+                PushedService.addLogEvent(context,"Connectivity: $it")
+                if(it==Connectivity.Status.WIFI) disconnect()
+                connected = it != Connectivity.Status.NONE
+                connect()
+            }
         }
     }
-
+    fun setMessageListener(newListener: (JSONObject)->Unit){
+        listener=newListener
+    }
     private fun connect() {
         if(!connected) {
             unLock()
@@ -55,14 +60,19 @@ class MessageListener (private val url : String, private val context: Context, v
     fun disconnect(dontReconnect :Boolean = false,forceDisconnect:Boolean = false){
         needReconnect=!dontReconnect
         if(activeWebSocket==null && needReconnect) connect()
-        else if(!forceDisconnect && Calendar.getInstance().timeInMillis-lastConnected<300000) {
+        else if(!forceDisconnect && Calendar.getInstance().timeInMillis-lastConnected<600000) {
             PushedService.addLogEvent(context,"Reconnect postponed")
             return
         }
         else activeWebSocket?.cancel()
 
-    }
 
+    }
+    fun deactivate()
+    {
+        connectivityActive=false
+        disconnect(true,true)
+    }
     override fun onMessage(webSocket: WebSocket, bytes: ByteString) {
         lock()
         val message=bytes.utf8()
