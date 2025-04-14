@@ -45,12 +45,14 @@ class PushedPermissionActivity : Activity() {
             val prefs = context.getSharedPreferences("Pushed", MODE_PRIVATE)
             prefs.edit().putBoolean("firstrun", false).apply()
 
-            // вызовем getNewToken с актуальным значением
-            val service = PushedService(context, null)
-            service.getNewToken()
+            // Просто инициируем обновление токена напрямую
+            PushedService.refreshToken(context, null) { token ->
+                PushedService.addLogEvent(context, "PermissionActivity token refresh result: $token")
+            }
         } catch (e: Exception) {
             e.printStackTrace()
         }
         finish()
     }
+
 }

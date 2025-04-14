@@ -123,7 +123,7 @@ class PushedService(private val context : Context, messageReceiverClass: Class<*
 
         }
 
-        fun refreshTokenAsync(
+        fun refreshToken(
             context: Context,
             oldPushedToken: String?,
             fcmToken: String? = null,
@@ -148,7 +148,7 @@ class PushedService(private val context : Context, messageReceiverClass: Class<*
             val content = JSONObject().apply {
                 put("clientToken", oldPushedToken ?: "")
                 put("operatingSystem", "Android")
-                put("sdkVersion", Build.VERSION.SDK_INT)
+                put("sdkVersion", Build.VERSION.SDK_INT.toString())
 
                 if (deviceSettings.length() > 0) {
                     put("deviceSettings", deviceSettings)
@@ -183,7 +183,7 @@ class PushedService(private val context : Context, messageReceiverClass: Class<*
                 }
             }
 
-            addLogEvent(context, "refreshTokenAsync request body: $content")
+            addLogEvent(context, "refreshToken request body: $content")
 
             val body = content.toString().toRequestBody("application/json; charset=utf-8".toMediaType())
             val request = Request.Builder()
@@ -194,13 +194,13 @@ class PushedService(private val context : Context, messageReceiverClass: Class<*
             val client = OkHttpClient()
             client.newCall(request).enqueue(object : Callback {
                 override fun onFailure(call: Call, e: IOException) {
-                    addLogEvent(context, "refreshTokenAsync error: ${e.message}")
+                    addLogEvent(context, "refreshToken error: ${e.message}")
                     callback?.invoke(null)
                 }
 
                 override fun onResponse(call: Call, response: Response) {
                     if (!response.isSuccessful) {
-                        addLogEvent(context, "refreshTokenAsync failed with code: ${response.code}")
+                        addLogEvent(context, "refreshToken failed with code: ${response.code}")
                         callback?.invoke(null)
                         return
                     }
@@ -220,15 +220,12 @@ class PushedService(private val context : Context, messageReceiverClass: Class<*
                         }
                         callback?.invoke(newToken)
                     } catch (e: Exception) {
-                        addLogEvent(context, "refreshTokenAsync parse error: ${e.message}")
+                        addLogEvent(context, "refreshToken parse error: ${e.message}")
                         callback?.invoke(null)
                     }
                 }
             })
         }
-
-
-
 
         private fun getBitmap(context: Context,uri:String?): Bitmap?{
             if(uri=="null") return null
@@ -375,7 +372,8 @@ class PushedService(private val context : Context, messageReceiverClass: Class<*
 
     }
     init{
-        pushedToken=secretPref.getString("token",null)
+      pref.edit().putBoolean("enablelogger", enableLogger).apply()
+      pushedToken=secretPref.getString("token",null)
         fcmToken=secretPref.getString("fcmtoken",null)
         ruStoreToken=secretPref.getString("rustoretoken",null)
         hpkToken=secretPref.getString("hpktoken",null)
@@ -545,38 +543,43 @@ class PushedService(private val context : Context, messageReceiverClass: Class<*
         pref.edit().putBoolean("restarted",false).apply()
         return pushedToken
     }
+
     fun getNewToken(): String? {
-        val oldToken = secretPref.getString("token", null)
+      val oldToken = secretPref.getString("token", null)
 
-        // Проверяем: мы на главном потоке?
-        val isMainThread = Looper.getMainLooper().thread == Thread.currentThread()
+      // Если токена ещё ни разу не было — снимаем ограничения StrictMode
+      val isFirstTokenRequest = oldToken.isNullOrEmpty()
+      if (isFirstTokenRequest) {
+        StrictMode.setThreadPolicy(StrictMode.ThreadPolicy.Builder().permitAll().build())
+      }
 
-        // Если НЕ на главном потоке — можно синхронно дождаться
-        if (!isMainThread) {
-            val latch = CountDownLatch(1)
-            var resultToken: String? = oldToken
+      val isMainThread = Looper.getMainLooper().thread == Thread.currentThread()
 
-            refreshTokenAsync(context, oldToken, fcmToken, hpkToken, ruStoreToken) { newToken ->
-                if (!newToken.isNullOrEmpty()) {
-                    resultToken = newToken
-                    pushedToken = newToken
-                }
-                latch.countDown()
-            }
+      // Если токен пустой — ждём синхронно (даже на UI потоке, если нужно)
+      if (isFirstTokenRequest || !isMainThread) {
+        val latch = CountDownLatch(1)
+        var resultToken: String? = oldToken
 
-            latch.await() // Блокирует, но только в фоновом потоке
-            return resultToken
+        refreshToken(context, oldToken, fcmToken, hpkToken, ruStoreToken) { newToken ->
+          if (!newToken.isNullOrEmpty()) {
+            resultToken = newToken
+            pushedToken = newToken
+          }
+          latch.countDown()
         }
 
-        // Если на главном потоке — просто запустить async и вернуть старый токен
-        refreshTokenAsync(context, oldToken, fcmToken, hpkToken, ruStoreToken) { newToken ->
-            if (!newToken.isNullOrEmpty()) {
-                pushedToken = newToken
-            }
-        }
+        latch.await()
+        return resultToken
+      }
 
-        return oldToken
+      // Если уже есть старый токен — просто обновляем его асинхронно
+      refreshToken(context, oldToken, fcmToken, hpkToken, ruStoreToken) { newToken ->
+        if (!newToken.isNullOrEmpty()) {
+          pushedToken = newToken
+        }
+      }
+
+      return oldToken
     }
-
 
 }
