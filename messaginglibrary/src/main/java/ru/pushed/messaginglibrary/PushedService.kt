@@ -19,6 +19,7 @@ import android.graphics.BitmapFactory
 import android.net.Uri
 import android.os.Build
 import android.os.IBinder
+import android.os.Looper
 import android.os.PowerManager
 import android.os.StrictMode
 import android.provider.Settings
@@ -47,11 +48,14 @@ import java.io.IOException
 import java.net.HttpURLConnection
 import java.net.URL
 import java.util.Calendar
+import java.util.concurrent.CountDownLatch
 
 enum class Status(val value: Int){
     ACTIVE(0),OFFLINE(1),NOTACTIVE(2)
 }
-class PushedService(private val context : Context, messageReceiverClass: Class<*>?, channel:String?="messages",enableLogger:Boolean=false) {
+
+
+class PushedService(private val context : Context, messageReceiverClass: Class<*>?, channel:String?="messages",enableLogger:Boolean=true) {
     private val tag="Pushed Service"
     private val pref: SharedPreferences =context.getSharedPreferences("Pushed",Context.MODE_PRIVATE)
     private val secretPref: SharedPreferences = getSecure(context)
@@ -118,6 +122,111 @@ class PushedService(private val context : Context, messageReceiverClass: Class<*
             )
 
         }
+
+        fun refreshToken(
+            context: Context,
+            oldPushedToken: String?,
+            fcmToken: String? = null,
+            hpkToken: String? = null,
+            ruStoreToken: String? = null,
+            callback: ((String?) -> Unit)? = null
+        ) {
+            val secretPref = getSecure(context)
+
+            val deviceSettings = JSONArray().apply {
+                if (!fcmToken.isNullOrEmpty()) {
+                    put(JSONObject().put("deviceToken", fcmToken).put("transportKind", "Fcm"))
+                }
+                if (!hpkToken.isNullOrEmpty()) {
+                    put(JSONObject().put("deviceToken", hpkToken).put("transportKind", "Hpk"))
+                }
+                if (!ruStoreToken.isNullOrEmpty()) {
+                    put(JSONObject().put("deviceToken", ruStoreToken).put("transportKind", "RuStore"))
+                }
+            }
+
+            val content = JSONObject().apply {
+                put("clientToken", oldPushedToken ?: "")
+                put("operatingSystem", "Android")
+                put("sdkVersion", Build.VERSION.SDK_INT.toString())
+
+                if (deviceSettings.length() > 0) {
+                    put("deviceSettings", deviceSettings)
+                }
+
+                try {
+                    val permissionGranted = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+                        ContextCompat.checkSelfPermission(context, Manifest.permission.POST_NOTIFICATIONS) == PackageManager.PERMISSION_GRANTED
+                    } else {
+                        NotificationManagerCompat.from(context).areNotificationsEnabled()
+                    }
+                    put("displayPushNotificationsPermission", permissionGranted)
+                } catch (e: Exception) {
+                    addLogEvent(context, "Permission check error: ${e.message}")
+                }
+
+                try {
+                    val pm = context.getSystemService(Context.POWER_SERVICE) as PowerManager
+                    val batteryOptimizationsIgnored = pm.isIgnoringBatteryOptimizations(context.packageName)
+                    val activityManager = context.getSystemService(Context.ACTIVITY_SERVICE) as ActivityManager
+                    val backgroundRestricted =
+                        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
+                            activityManager.isBackgroundRestricted
+                        } else {
+                            false
+                        }
+
+                    val backgroundWorkPermission = batteryOptimizationsIgnored && !backgroundRestricted
+                    put("backgroundWorkPermission", backgroundWorkPermission)
+                } catch (e: Exception) {
+                    addLogEvent(context, "Background permission check error: ${e.message}")
+                }
+            }
+
+            addLogEvent(context, "refreshToken request body: $content")
+
+            val body = content.toString().toRequestBody("application/json; charset=utf-8".toMediaType())
+            val request = Request.Builder()
+                .url("https://sub.pushed.ru/v2/tokens")
+                .post(body)
+                .build()
+
+            val client = OkHttpClient()
+            client.newCall(request).enqueue(object : Callback {
+                override fun onFailure(call: Call, e: IOException) {
+                    addLogEvent(context, "refreshToken error: ${e.message}")
+                    callback?.invoke(null)
+                }
+
+                override fun onResponse(call: Call, response: Response) {
+                    if (!response.isSuccessful) {
+                        addLogEvent(context, "refreshToken failed with code: ${response.code}")
+                        callback?.invoke(null)
+                        return
+                    }
+
+                    val responseBody = response.body?.string()
+                    try {
+                        val model = JSONObject(responseBody!!)["model"] as JSONObject
+                        val newToken = model.optString("clientToken", null)
+                        if (!newToken.isNullOrEmpty()) {
+                            secretPref.edit().apply {
+                                putString("token", newToken)
+                                if (!fcmToken.isNullOrEmpty()) putString("fcmtoken", fcmToken)
+                                if (!hpkToken.isNullOrEmpty()) putString("hpktoken", hpkToken)
+                                if (!ruStoreToken.isNullOrEmpty()) putString("rustoretoken", ruStoreToken)
+                                apply()
+                            }
+                        }
+                        callback?.invoke(newToken)
+                    } catch (e: Exception) {
+                        addLogEvent(context, "refreshToken parse error: ${e.message}")
+                        callback?.invoke(null)
+                    }
+                }
+            })
+        }
+
         private fun getBitmap(context: Context,uri:String?): Bitmap?{
             if(uri=="null") return null
             var bigIconRes=context.resources.getIdentifier(uri,"mipmap",context.packageName)
@@ -263,53 +372,66 @@ class PushedService(private val context : Context, messageReceiverClass: Class<*
 
     }
     init{
-        pushedToken=secretPref.getString("token",null)
+      pref.edit().putBoolean("enablelogger", enableLogger).apply()
+      pushedToken=secretPref.getString("token",null)
         fcmToken=secretPref.getString("fcmtoken",null)
         ruStoreToken=secretPref.getString("rustoretoken",null)
         hpkToken=secretPref.getString("hpktoken",null)
         pushedToken=getNewToken()
         addLogEvent(context,"Pushed Token: $pushedToken")
-        if(pushedToken!=null){
-            status=Status.OFFLINE
-            pref.edit().putString("listenerclass",messageReceiverClass?.name).apply()
-            pref.edit().putString("channel",channel).apply()
-            pref.edit().putBoolean("enablelogger",enableLogger).apply()
-            val firstRun=pref.getBoolean("firstrun", true)
-            val battaryIntent= Intent()
-            battaryIntent.action = Settings.ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS
-            battaryIntent.data = Uri.parse("package:${context.packageName}")
-            if(channel!=null){
-                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-                    val notificationChannel= NotificationChannel(channel,"Messages", NotificationManager.IMPORTANCE_HIGH)
-                    val notificationManager=context.getSystemService(NotificationManager::class.java)
-                    notificationManager.createNotificationChannel(notificationChannel)
-                }
-                if(firstRun)
-                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-                        if (ContextCompat.checkSelfPermission(context,
-                                Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED) {
-                            (context as Activity).requestPermissions(arrayOf(Manifest.permission.POST_NOTIFICATIONS), 1)
+        val firstRun = pref.getBoolean("firstrun", true)
+        if (channel != null) {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                val notificationChannel = NotificationChannel(channel, "Messages", NotificationManager.IMPORTANCE_HIGH)
+                val notificationManager = context.getSystemService(NotificationManager::class.java)
+                notificationManager.createNotificationChannel(notificationChannel)
+            }
+            if (firstRun) {
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+                    if (ContextCompat.checkSelfPermission(context, Manifest.permission.POST_NOTIFICATIONS)
+                        != PackageManager.PERMISSION_GRANTED
+                    ) {
+                        try {
+                            val intent = Intent(context, PushedPermissionActivity::class.java)
+                            intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                            context.startActivity(intent)
+                        } catch (e: Exception) {
+                            addLogEvent(context, "PermissionActivity start error: ${e.message}")
+                            getNewToken()
                         }
+                    } else {
+                        getNewToken()
                     }
+                } else {
+                    getNewToken()
+                }
             }
-            val pm=context.getSystemService(Context.POWER_SERVICE) as PowerManager
-            if(!pm.isIgnoringBatteryOptimizations(context.packageName) && firstRun) {
-                context.startActivity(battaryIntent)
-            }
-            pref.edit().putBoolean("firstrun",false).apply()
+        }
+        val pm = context.getSystemService(Context.POWER_SERVICE) as PowerManager
+        if (!pm.isIgnoringBatteryOptimizations(context.packageName) && firstRun) {
+            val batteryIntent = Intent(Settings.ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS)
+            batteryIntent.data = Uri.parse("package:${context.packageName}")
+            context.startActivity(batteryIntent)
+        }
+        pref.edit().putBoolean("firstrun", false).apply()
+        if (pushedToken != null) {
+            status = Status.OFFLINE
+            pref.edit().putString("listenerclass", messageReceiverClass?.name).apply()
+            pref.edit().putString("channel", channel).apply()
+            pref.edit().putBoolean("enablelogger", enableLogger).apply()
+
             messageObserver = Observer<JSONObject> { message: JSONObject? ->
-                if(messageHandler==null || messageHandler?.invoke(message!!)==false){
-                    try{
-                        val notification=JSONObject(message!!["pushedNotification"].toString())
-                        showNotification(context,notification )
+                if (messageHandler == null || messageHandler?.invoke(message!!) == false) {
+                    try {
+                        val notification = JSONObject(message!!["pushedNotification"].toString())
+                        showNotification(context, notification)
+                    } catch (e: Exception) {
+                        addLogEvent(context, "Notification error: ${e.message}")
                     }
-                    catch (e:Exception){
-                        addLogEvent(context,"Notification error: ${e.message}")
-                    }
-                    if(messageReceiverClass!=null){
+                    if (messageReceiverClass != null) {
                         val intent = Intent(context, messageReceiverClass)
                         intent.action = "ru.pushed.action.MESSAGE"
-                        intent.putExtra("message",message.toString())
+                        intent.putExtra("message", message.toString())
                         context.sendBroadcast(intent)
                     }
                 }
@@ -421,53 +543,43 @@ class PushedService(private val context : Context, messageReceiverClass: Class<*
         pref.edit().putBoolean("restarted",false).apply()
         return pushedToken
     }
-    private fun getNewToken():String?{
-        val policy= StrictMode.ThreadPolicy.Builder().permitAll().build()
-        StrictMode.setThreadPolicy(policy)
-        val deviceSettings= JSONArray()// mutableListOf<JSONObject>()
-        if(fcmToken?.isNotEmpty()==true) deviceSettings.put(JSONObject().put("deviceToken",fcmToken).put("transportKind","Fcm"))
-        if(hpkToken?.isNotEmpty()==true) deviceSettings.put(JSONObject().put("deviceToken",hpkToken).put("transportKind","Hpk"))
-        if(ruStoreToken?.isNotEmpty() == true) deviceSettings.put(JSONObject().put("deviceToken",ruStoreToken).put("transportKind","RuStore"))
-        val content=JSONObject("{\"clientToken\": \"${pushedToken?:""}\"}")
-        if(deviceSettings.length()>0) content.put("deviceSettings",deviceSettings)
-        val body= content.toString().toRequestBody("application/json; charset=utf-8".toMediaType())
-        addLogEvent(context,"Content: $content")
-        var result:String?=null
-        val client = OkHttpClient()
-        val request = Request.Builder()
-            .url("https://sub.pushed.ru/v2/tokens")
-            .post(body)
-            .build()
-        try {
-            val response=client.newCall(request).execute()
-            if(response.isSuccessful)
-            {
 
-                val responseBody= response.body?.string()
-                addLogEvent(context,"Get Token response: $responseBody")
-                result = try{
-                    val model=JSONObject(responseBody!!)["model"] as JSONObject
-                    addLogEvent(context,"model: $model")
-                    model["clientToken"] as String?
-                } catch (e:Exception){
-                    addLogEvent(context,"Convert ERR: ${e.message}")
-                    null
-                }
-            }
+    fun getNewToken(): String? {
+      val oldToken = secretPref.getString("token", null)
 
+      // Если токена ещё ни разу не было — снимаем ограничения StrictMode
+      val isFirstTokenRequest = oldToken.isNullOrEmpty()
+      if (isFirstTokenRequest) {
+        StrictMode.setThreadPolicy(StrictMode.ThreadPolicy.Builder().permitAll().build())
+      }
+
+      val isMainThread = Looper.getMainLooper().thread == Thread.currentThread()
+
+      // Если токен пустой — ждём синхронно (даже на UI потоке, если нужно)
+      if (isFirstTokenRequest || !isMainThread) {
+        val latch = CountDownLatch(1)
+        var resultToken: String? = oldToken
+
+        refreshToken(context, oldToken, fcmToken, hpkToken, ruStoreToken) { newToken ->
+          if (!newToken.isNullOrEmpty()) {
+            resultToken = newToken
+            pushedToken = newToken
+          }
+          latch.countDown()
         }
-        catch (e: IOException){
-            addLogEvent(context,"Get Token Err: ${e.message}")
+
+        latch.await()
+        return resultToken
+      }
+
+      // Если уже есть старый токен — просто обновляем его асинхронно
+      refreshToken(context, oldToken, fcmToken, hpkToken, ruStoreToken) { newToken ->
+        if (!newToken.isNullOrEmpty()) {
+          pushedToken = newToken
         }
-        if(result!=null && result!=""){
-            secretPref.edit().putString("token",result).apply()
-            if(fcmToken!=null) secretPref.edit().putString("fcmtoken",fcmToken).apply()
-            if(hpkToken!=null) secretPref.edit().putString("hpktoken",hpkToken).apply()
-            if(ruStoreToken!=null) secretPref.edit().putString("rustoretoken",ruStoreToken).apply()
-            pushedToken=result
-        }
-        else result=pushedToken
-        return result
+      }
+
+      return oldToken
     }
 
 }

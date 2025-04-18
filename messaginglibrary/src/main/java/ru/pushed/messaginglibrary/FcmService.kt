@@ -13,7 +13,17 @@ class FcmService : FirebaseMessagingService(){
     override fun onNewToken(token: String) {
         Log.d(tag, "Fcm Refreshed token: $token")
         PushedService.addLogEvent(this, "FCM change token: $token")
+
+        // Сохраняем новый токен
+        val secret = PushedService.getSecure(this)
+        val oldToken = secret.getString("fcmtoken", null)
+        if (token != oldToken) {
+            secret.edit().putString("fcmtoken", token).apply()
+            val pushedService = PushedService(applicationContext, null)
+            pushedService.getNewToken()
+        }
     }
+
 
     override fun onMessageReceived(message: RemoteMessage) {
         val pref=getSharedPreferences("Pushed", Context.MODE_PRIVATE)
