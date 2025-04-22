@@ -15,7 +15,7 @@ class BootReceiver : BroadcastReceiver(){
             if(secretPref.getString("token","")!="") {
                 try {
                     if (BackgroundService.active || Build.VERSION.SDK_INT <= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
-                        context?.startService(Intent(context, BackgroundService::class.java))
+                        context.startService(Intent(context, BackgroundService::class.java))
                         if(!BackgroundService.active) pref?.edit()?.putBoolean("restarted", true)?.apply()
                         PushedService.addLogEvent(context,"Boot start service")
                     }
@@ -38,7 +38,7 @@ class BootReceiver : BroadcastReceiver(){
                     //    PushedService.addLogEvent(context,"Alarm Sheduled")
                     PushedService.addLogEvent(context,"Boot start JobIntent")
                     val jobIntent = Intent(context, PushedJobIntentService::class.java)
-                    PushedJobIntentService.enqueueWork(context!!, jobIntent)
+                    PushedJobIntentService.enqueueWork(context, jobIntent)
                 }
             }
         }

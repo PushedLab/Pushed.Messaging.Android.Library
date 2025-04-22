@@ -141,8 +141,19 @@ For init library you need create instace of PushedService
 ```kotlin
 // context - Context
 // messageReceiverClass - your own messageReceiverClass class
-PushedService(private val context : Context, messageReceiverClass: Class<*>?);
+// channel - notification channell (if cahnnel == null The library will not show notifications)
+// enableLogger - Allows the library to save a local log for debugging purposes
+// askPermissions -  If set to true, permissions to work in the background and display notifications are automatically requested.
+PushedService(private val context : Context, messageReceiverClass: Class<*>?,channel:String?="messages",enableLogger:Boolean=false, askPermissions:Boolean=true);
 
+```
+
+If you need to request permissions yourself, use the askPermissions method.
+
+```kotlin
+// askNotification - Ask permissions to display notifications
+// askBackgroundWork - Ask permissions to work in the background
+PushedService.askPermissions(askNotification:Boolean=true,askBackgroundWork:Boolean=true)
 ```
 
 To start a service or bind to an active service, you need to call PushedService.start.

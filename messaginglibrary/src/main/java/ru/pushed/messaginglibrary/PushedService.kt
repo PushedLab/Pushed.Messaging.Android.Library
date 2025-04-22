@@ -47,7 +47,11 @@ import ru.rustore.sdk.pushclient.RuStorePushClient
 import java.io.IOException
 import java.net.HttpURLConnection
 import java.net.URL
+import java.text.SimpleDateFormat
+import java.time.Instant
 import java.util.Calendar
+import java.util.Date
+import java.util.Locale
 import java.util.concurrent.CountDownLatch
 
 enum class Status(val value: Int){
@@ -55,7 +59,7 @@ enum class Status(val value: Int){
 }
 
 
-class PushedService(private val context : Context, messageReceiverClass: Class<*>?, channel:String?="messages",enableLogger:Boolean=true) {
+class PushedService(private val context : Context, messageReceiverClass: Class<*>?, channel:String?="messages",enableLogger:Boolean=false, askPermissions:Boolean=true,enableServerLogger:Boolean=false) {
     private val tag="Pushed Service"
     private val pref: SharedPreferences =context.getSharedPreferences("Pushed",Context.MODE_PRIVATE)
     private val secretPref: SharedPreferences = getSecure(context)
@@ -131,6 +135,7 @@ class PushedService(private val context : Context, messageReceiverClass: Class<*
             ruStoreToken: String? = null,
             callback: ((String?) -> Unit)? = null
         ) {
+            addLogEvent(context, "Refresh")
             val secretPref = getSecure(context)
 
             val deviceSettings = JSONArray().apply {
@@ -208,7 +213,7 @@ class PushedService(private val context : Context, messageReceiverClass: Class<*
                     val responseBody = response.body?.string()
                     try {
                         val model = JSONObject(responseBody!!)["model"] as JSONObject
-                        val newToken = model.optString("clientToken", null)
+                        val newToken = model.optString("clientToken", "")
                         if (!newToken.isNullOrEmpty()) {
                             secretPref.edit().apply {
                                 putString("token", newToken)
@@ -322,10 +327,48 @@ class PushedService(private val context : Context, messageReceiverClass: Class<*
             if(sp!=null) return sp.getString("log","")?:""
             return ""
         }
+        fun addServerLog(context: Context? ,message :String, properties : JSONObject){
+            val sp = context?.getSharedPreferences("Pushed", Context.MODE_PRIVATE)
+            if(sp?.getBoolean("enableserverlogger",false)!=true) return
+            val secretPref=getSecure(context)
+            val token = secretPref.getString("token",null)
+            if(token != null) properties.put("ClientToken",token)
+            val dateFormat = SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss.SSS", Locale.getDefault())
+            val content = JSONObject().apply {
+                put("message", message)
+                put("incidentTime", dateFormat.format(Calendar.getInstance().time))
+                if(properties.length()>0) {
+                    put("properties", properties)
+                }
+            }
+            addLogEvent(context, "Server log request body: $content")
+            val body=content.toString().toRequestBody("application/json; charset=utf-8".toMediaType())
+            val client = OkHttpClient()
+            val request = Request.Builder()
+                .url("https://api.multipushed.ru/v2/log")
+                .post(body)
+                .build()
+            client.newCall(request).enqueue(object :Callback{
+                override fun onFailure(call: Call, e: IOException) {
+                    addLogEvent(context,"Server log failure: ${e.message}")
+                }
+
+                override fun onResponse(call: Call, response: Response) {
+                    if(response.isSuccessful){
+                        val responseBody= response.body?.string()
+                        addLogEvent(context,"Server log response: $responseBody")
+                    }
+                    else
+                        addLogEvent(context,"Server log code: ${response.code}")
+                }
+
+            })
+        }
+
         fun confirmDelivered(context: Context? ,messageId :String,transport:String,traceId:String){
-            val sp =context?.getSharedPreferences("Pushed",Context.MODE_PRIVATE)
+            val secretPref=PushedService.getSecure(context!!)
             addLogEvent(context,"Confirm: $messageId/$transport")
-            val token: String = sp?.getString("token",null) ?: return
+            val token: String = secretPref.getString("token",null) ?: return
             val basicAuth = "Basic ${Base64.encodeToString("$token:$messageId".toByteArray(),Base64.NO_WRAP)}"
             val body="".toRequestBody("application/json; charset=utf-8".toMediaType())
             val client = OkHttpClient()
@@ -372,8 +415,10 @@ class PushedService(private val context : Context, messageReceiverClass: Class<*
 
     }
     init{
-      pref.edit().putBoolean("enablelogger", enableLogger).apply()
-      pushedToken=secretPref.getString("token",null)
+        pref.edit().putBoolean("enablelogger", enableLogger).apply()
+        pref.edit().putBoolean("enableserverlogger", enableServerLogger).apply()
+
+        pushedToken=secretPref.getString("token",null)
         fcmToken=secretPref.getString("fcmtoken",null)
         ruStoreToken=secretPref.getString("rustoretoken",null)
         hpkToken=secretPref.getString("hpktoken",null)
@@ -386,39 +431,24 @@ class PushedService(private val context : Context, messageReceiverClass: Class<*
                 val notificationManager = context.getSystemService(NotificationManager::class.java)
                 notificationManager.createNotificationChannel(notificationChannel)
             }
-            if (firstRun) {
-                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-                    if (ContextCompat.checkSelfPermission(context, Manifest.permission.POST_NOTIFICATIONS)
-                        != PackageManager.PERMISSION_GRANTED
-                    ) {
-                        try {
-                            val intent = Intent(context, PushedPermissionActivity::class.java)
-                            intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-                            context.startActivity(intent)
-                        } catch (e: Exception) {
-                            addLogEvent(context, "PermissionActivity start error: ${e.message}")
-                            getNewToken()
-                        }
-                    } else {
-                        getNewToken()
-                    }
-                } else {
-                    getNewToken()
-                }
+        }
+        if (firstRun && askPermissions) {
+            try {
+                val intent = Intent(context, PushedPermissionActivity::class.java)
+                intent.putExtra("notification",channel != null)
+                intent.putExtra("optimization",true)
+                intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                context.startActivity(intent)
+            } catch (e: Exception) {
+                addLogEvent(context, "PermissionActivity start error: ${e.message}")
             }
         }
-        val pm = context.getSystemService(Context.POWER_SERVICE) as PowerManager
-        if (!pm.isIgnoringBatteryOptimizations(context.packageName) && firstRun) {
-            val batteryIntent = Intent(Settings.ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS)
-            batteryIntent.data = Uri.parse("package:${context.packageName}")
-            context.startActivity(batteryIntent)
-        }
+        
         pref.edit().putBoolean("firstrun", false).apply()
         if (pushedToken != null) {
             status = Status.OFFLINE
             pref.edit().putString("listenerclass", messageReceiverClass?.name).apply()
             pref.edit().putString("channel", channel).apply()
-            pref.edit().putBoolean("enablelogger", enableLogger).apply()
 
             messageObserver = Observer<JSONObject> { message: JSONObject? ->
                 if (messageHandler == null || messageHandler?.invoke(message!!) == false) {
@@ -442,7 +472,7 @@ class PushedService(private val context : Context, messageReceiverClass: Class<*
             try{
                 FirebaseMessaging.getInstance().token.addOnCompleteListener { task ->
                     if (task.isSuccessful) {
-                        addLogEvent(context, "Fcm Token: ${task.result}")
+                        addLogEvent(context, "Fcm Token: ${task.result}, $fcmToken")
                         if (fcmToken != task.result) {
                             fcmToken = task.result
                             getNewToken()
@@ -494,6 +524,19 @@ class PushedService(private val context : Context, messageReceiverClass: Class<*
                 addLogEvent(context, "HMS Core init Error: ${e.message}")
             }
         }
+    }
+
+    fun askPermissions(askNotification:Boolean=true,askBackgroundWork:Boolean=true){
+        try {
+            val intent = Intent(context, PushedPermissionActivity::class.java)
+            intent.putExtra("notification",askNotification)
+            intent.putExtra("optimization",askBackgroundWork)
+            intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+            context.startActivity(intent)
+        } catch (e: Exception) {
+            addLogEvent(context, "PermissionActivity start error: ${e.message}")
+        }
+
     }
     fun setStatusHandler(handler: (Status)->Unit){
         statusHandler=handler
@@ -549,9 +592,6 @@ class PushedService(private val context : Context, messageReceiverClass: Class<*
 
       // Если токена ещё ни разу не было — снимаем ограничения StrictMode
       val isFirstTokenRequest = oldToken.isNullOrEmpty()
-      if (isFirstTokenRequest) {
-        StrictMode.setThreadPolicy(StrictMode.ThreadPolicy.Builder().permitAll().build())
-      }
 
       val isMainThread = Looper.getMainLooper().thread == Thread.currentThread()
 
@@ -574,11 +614,10 @@ class PushedService(private val context : Context, messageReceiverClass: Class<*
 
       // Если уже есть старый токен — просто обновляем его асинхронно
       refreshToken(context, oldToken, fcmToken, hpkToken, ruStoreToken) { newToken ->
-        if (!newToken.isNullOrEmpty()) {
-          pushedToken = newToken
-        }
+          if (!newToken.isNullOrEmpty()) {
+            pushedToken = newToken
+          }
       }
-
       return oldToken
     }
 

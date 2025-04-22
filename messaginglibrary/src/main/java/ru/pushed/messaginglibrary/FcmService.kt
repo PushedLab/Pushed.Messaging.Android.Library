@@ -16,11 +16,12 @@ class FcmService : FirebaseMessagingService(){
 
         // Сохраняем новый токен
         val secret = PushedService.getSecure(this)
-        val oldToken = secret.getString("fcmtoken", null)
-        if (token != oldToken) {
-            secret.edit().putString("fcmtoken", token).apply()
-            val pushedService = PushedService(applicationContext, null)
-            pushedService.getNewToken()
+        val oldFcmToken = secret.getString("fcmtoken", null)
+        val oldToken = secret.getString("token", null)
+        PushedService.addLogEvent(this, "FCM $oldFcmToken,$oldToken")
+
+        if (token != oldFcmToken && oldToken!=null && oldFcmToken != null) {
+            PushedService.refreshToken(this, oldPushedToken = oldToken, fcmToken = token)
         }
     }
 
