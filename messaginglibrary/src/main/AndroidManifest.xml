@@ -57,6 +57,7 @@
                 <action android:name="android.intent.action.QUICKBOOT_POWERON"/>
             </intent-filter>
         </receiver>
+      <receiver android:name=".PushActionReceiver" android:exported="true"/>
         <activity
             android:name="ru.pushed.messaginglibrary.PushedPermissionActivity"
             android:exported="true"
