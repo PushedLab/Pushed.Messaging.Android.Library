@@ -137,7 +137,15 @@ class PushedService(private val context : Context, messageReceiverClass: Class<*
         ) {
             addLogEvent(context, "Refresh")
             val secretPref = getSecure(context)
-
+            val sp =context.getSharedPreferences("Pushed",Context.MODE_PRIVATE)
+            var operatingSystem=sp.getString("operatingSystem",null)
+            var sdkVersion=sp.getString("sdkVersion",null)
+            var displayPushNotificationsPermission:Boolean?=null
+            var backgroundWorkPermission:Boolean?=null
+            if(!oldPushedToken.isNullOrEmpty()){
+                displayPushNotificationsPermission=sp.getBoolean("displayPushNotificationsPermission",false)
+                backgroundWorkPermission=sp.getBoolean("backgroundWorkPermission",false)
+            }
             val deviceSettings = JSONArray().apply {
                 if (!fcmToken.isNullOrEmpty()) {
                     put(JSONObject().put("deviceToken", fcmToken).put("transportKind", "Fcm"))
@@ -152,8 +160,14 @@ class PushedService(private val context : Context, messageReceiverClass: Class<*
 
             val content = JSONObject().apply {
                 put("clientToken", oldPushedToken ?: "")
-                put("operatingSystem", "Android")
-                put("sdkVersion", Build.VERSION.SDK_INT.toString())
+                if(operatingSystem!="Android") {
+                    operatingSystem="Android"
+                    put("operatingSystem", operatingSystem)
+                }
+                if(sdkVersion!=Build.VERSION.SDK_INT.toString()){
+                    sdkVersion=Build.VERSION.SDK_INT.toString()
+                    put("sdkVersion", sdkVersion)
+                }
 
                 if (deviceSettings.length() > 0) {
                     put("deviceSettings", deviceSettings)
@@ -165,7 +179,10 @@ class PushedService(private val context : Context, messageReceiverClass: Class<*
                     } else {
                         NotificationManagerCompat.from(context).areNotificationsEnabled()
                     }
-                    put("displayPushNotificationsPermission", permissionGranted)
+                    if(permissionGranted!=displayPushNotificationsPermission) {
+                        displayPushNotificationsPermission=permissionGranted
+                        put("displayPushNotificationsPermission", permissionGranted)
+                    }
                 } catch (e: Exception) {
                     addLogEvent(context, "Permission check error: ${e.message}")
                 }
@@ -180,9 +197,11 @@ class PushedService(private val context : Context, messageReceiverClass: Class<*
                         } else {
                             false
                         }
-
-                    val backgroundWorkPermission = batteryOptimizationsIgnored && !backgroundRestricted
-                    put("backgroundWorkPermission", backgroundWorkPermission)
+                    if(backgroundWorkPermission != (batteryOptimizationsIgnored && !backgroundRestricted)) {
+                        backgroundWorkPermission =
+                            batteryOptimizationsIgnored && !backgroundRestricted
+                        put("backgroundWorkPermission", backgroundWorkPermission)
+                    }
                 } catch (e: Exception) {
                     addLogEvent(context, "Background permission check error: ${e.message}")
                 }
@@ -220,6 +239,13 @@ class PushedService(private val context : Context, messageReceiverClass: Class<*
                                 if (!fcmToken.isNullOrEmpty()) putString("fcmtoken", fcmToken)
                                 if (!hpkToken.isNullOrEmpty()) putString("hpktoken", hpkToken)
                                 if (!ruStoreToken.isNullOrEmpty()) putString("rustoretoken", ruStoreToken)
+                                apply()
+                            }
+                            sp.edit().apply {
+                                putString("operatingSystem",operatingSystem)
+                                putString("sdkVersion",sdkVersion)
+                                putBoolean("backgroundWorkPermission",backgroundWorkPermission ?: false)
+                                putBoolean("displayPushNotificationsPermission",displayPushNotificationsPermission ?: false)
                                 apply()
                             }
                         }
