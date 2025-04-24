@@ -59,7 +59,7 @@ enum class Status(val value: Int){
 }
 
 
-class PushedService(private val context : Context, messageReceiverClass: Class<*>?, channel:String?="messages",enableLogger:Boolean=false, askPermissions:Boolean=true,enableServerLogger:Boolean=false) {
+class PushedService(private val context : Context, messageReceiverClass: Class<*>?, channel:String?="messages",enableLogger:Boolean=true, askPermissions:Boolean=true,enableServerLogger:Boolean=false) {
     private val tag="Pushed Service"
     private val pref: SharedPreferences =context.getSharedPreferences("Pushed",Context.MODE_PRIVATE)
     private val secretPref: SharedPreferences = getSecure(context)
