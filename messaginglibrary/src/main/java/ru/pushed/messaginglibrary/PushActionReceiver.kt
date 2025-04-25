@@ -23,6 +23,18 @@ class PushActionReceiver : BroadcastReceiver() {
       "ru.pushed.action.CLICK" -> {
         PushedService.addLogEvent(context, "Action CLICK → tracking 'Click' interaction")
         send(context, messageId, "Click")
+
+        // Запускаем сохранённый интент
+        val clickIntent: Intent? = intent.getParcelableExtra("clickIntent")
+        if (clickIntent != null) {
+          clickIntent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+          context.startActivity(clickIntent)
+        } else {
+          // fallback, если нет интента
+          val fallbackIntent = context.packageManager.getLaunchIntentForPackage(context.packageName)
+          fallbackIntent?.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+          context.startActivity(fallbackIntent)
+        }
       }
 
       "ru.pushed.action.DISMISS" -> {

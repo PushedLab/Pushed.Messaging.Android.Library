@@ -286,17 +286,14 @@ class PushedService(private val context : Context, messageReceiverClass: Class<*
         val sp = context.getSharedPreferences("Pushed", Context.MODE_PRIVATE)
         val channel = sp.getString("channel", null) ?: return
         val id = sp.getInt("pushId", 0) + 1
-        var flags = PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+        val flags = PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
 
-        // Дополнительные данные из родительского объекта
         val messageId = pushedMessage.optString("messageId", "unknown")
         val traceId = pushedMessage.optString("mfTraceId", "")
-        val transport = pushedMessage.optString("transportKind", "Fcm") // по желанию можно передавать из FCM/HMS/RuStore
+        val transport = pushedMessage.optString("transportKind", "Fcm")
 
-        // Логирование
         addLogEvent(context, "Notification: $pushedNotification (messageId=$messageId, traceId=$traceId, transport=$transport)")
 
-        // Содержимое уведомления
         val body = pushedNotification.optString("Body", "")
         if (body == "null" || body.isEmpty()) return
 
@@ -307,29 +304,19 @@ class PushedService(private val context : Context, messageReceiverClass: Class<*
 
         val bitmap = getBitmap(context, pushedNotification.optString("Image"))
 
-        // Открытие по клику
-        var clickIntent = context.packageManager.getLaunchIntentForPackage(context.packageName)
-        try {
-          val url = pushedNotification.optString("Url", "")
-          if (url != "null" && url.isNotEmpty()) {
-            clickIntent = Intent(Intent.ACTION_VIEW, Uri.parse(url)).apply {
-              flags = Intent.FLAG_ACTIVITY_SINGLE_TOP
-            }
-          }
-        } catch (_: Exception) {
-          clickIntent = context.packageManager.getLaunchIntentForPackage(context.packageName)
-        }
+        val rawUrl = pushedNotification.optString("Url", "")
+        val url = if (rawUrl != "null") rawUrl else ""
 
-        // Broadcast по нажатию
-        val clickActionIntent = Intent(context, PushActionReceiver::class.java).apply {
-          action = "ru.pushed.action.CLICK"
+
+        val clickIntent = Intent(context, PushedClickActivity::class.java).apply {
           putExtra("messageId", messageId)
           putExtra("transport", transport)
           putExtra("traceId", traceId)
+          putExtra("url", url)
         }
-        val clickBroadcastIntent = PendingIntent.getBroadcast(context, id + 1000, clickActionIntent, flags)
 
-        // Broadcast при удалении уведомления
+        val contentPendingIntent = PendingIntent.getActivity(context, id + 1000, clickIntent, flags)
+
         val dismissActionIntent = Intent(context, PushActionReceiver::class.java).apply {
           action = "ru.pushed.action.DISMISS"
           putExtra("messageId", messageId)
@@ -346,8 +333,8 @@ class PushedService(private val context : Context, messageReceiverClass: Class<*
             setContentTitle(title)
             setContentText(body)
             setAutoCancel(true)
-            setContentIntent(clickBroadcastIntent) // обработка клика
-            setDeleteIntent(dismissBroadcastIntent) // обработка смахивания
+            setContentIntent(contentPendingIntent)
+            setDeleteIntent(dismissBroadcastIntent)
             priority = NotificationCompat.PRIORITY_MAX
 
             if (bitmap != null) {
@@ -370,12 +357,14 @@ class PushedService(private val context : Context, messageReceiverClass: Class<*
             putExtra("traceId", traceId)
           }
           context.sendBroadcast(shownIntent)
+
         } catch (e: SecurityException) {
           addLogEvent(context, "Notify Security Error: ${e.message}")
         } catch (e: Exception) {
           addLogEvent(context, "Notify Error: ${e.message}")
         }
       }
+
 
       fun addLogEvent(context: Context? ,event:String){
             val sp = context?.getSharedPreferences("Pushed", Context.MODE_PRIVATE)

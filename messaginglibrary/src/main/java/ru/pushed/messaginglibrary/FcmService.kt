@@ -58,7 +58,7 @@ class FcmService : FirebaseMessagingService(){
                 val listenerClassName = pref.getString("listenerclass",null)
                 if(notification!=null) {
                     try {
-                        PushedService.showNotification(this, JSONObject(notification))
+                        PushedService.showNotification(this, pushedMessage)
                     }
                     catch (e:Exception){
                         PushedService.addLogEvent(this,"Notification error: ${e.message}")
