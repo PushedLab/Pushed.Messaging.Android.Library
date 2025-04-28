@@ -23,7 +23,7 @@ allprojects {
 
 ```gradle
     dependencies {
-	implementation 'com.github.PushedLab:Pushed.Messaging.Android.Library:1.3.1'
+	implementation 'com.github.PushedLab:Pushed.Messaging.Android.Library:1.4.2'
     }
 ``` 
 
@@ -43,7 +43,7 @@ class MyMessageReceiver : MessageReceiver() {
     <application>
     ...
         <receiver
-            android:name=".MyMessageReceiver"
+            android:name=".MyMessageReceiver"                                               
             android:enabled="true"
             android:exported="true">
             <intent-filter>
