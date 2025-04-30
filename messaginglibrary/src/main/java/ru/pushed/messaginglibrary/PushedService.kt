@@ -62,6 +62,8 @@ enum class Status(val value: Int){
 class PushedService(private val context : Context, messageReceiverClass: Class<*>?, channel:String?="messages",enableLogger:Boolean=true, askPermissions:Boolean=true,enableServerLogger:Boolean=false) {
     private val tag="Pushed Service"
     private val pref: SharedPreferences =context.getSharedPreferences("Pushed",Context.MODE_PRIVATE)
+    private val flPref: SharedPreferences =context.getSharedPreferences("pushed",Context.MODE_PRIVATE)
+
     private val secretPref: SharedPreferences = getSecure(context)
     private var serviceBinder: IBackgroundServiceBinder?=null
     private var messageHandler: ((JSONObject) -> Boolean)?=null
@@ -473,6 +475,8 @@ class PushedService(private val context : Context, messageReceiverClass: Class<*
         pref.edit().putBoolean("enableserverlogger", enableServerLogger).apply()
 
         pushedToken=secretPref.getString("token",null)
+        if(pushedToken==null) pushedToken=pref.getString("token",null)
+        if(pushedToken==null) pushedToken=flPref.getString("token",null)
         fcmToken=secretPref.getString("fcmtoken",null)
         ruStoreToken=secretPref.getString("rustoretoken",null)
         hpkToken=secretPref.getString("hpktoken",null)
@@ -643,7 +647,10 @@ class PushedService(private val context : Context, messageReceiverClass: Class<*
     }
 
     fun getNewToken(): String? {
-      val oldToken = secretPref.getString("token", null)
+      var oldToken = pushedToken
+
+      if(oldToken==null)
+        oldToken = secretPref.getString("token", null)
 
       // Если токена ещё ни разу не было — снимаем ограничения StrictMode
       val isFirstTokenRequest = oldToken.isNullOrEmpty()
