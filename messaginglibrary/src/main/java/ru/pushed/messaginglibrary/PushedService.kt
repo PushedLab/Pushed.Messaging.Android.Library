@@ -59,7 +59,7 @@ enum class Status(val value: Int){
 }
 
 
-class PushedService(private val context : Context, messageReceiverClass: Class<*>?, channel:String?="messages",enableLogger:Boolean=false, askPermissions:Boolean=true,enableServerLogger:Boolean=false) {
+class PushedService(private val context : Context, messageReceiverClass: Class<*>?, channel:String?="messages",enableLogger:Boolean=true, askPermissions:Boolean=true,enableServerLogger:Boolean=false) {
     private val tag="Pushed Service"
     private val pref: SharedPreferences =context.getSharedPreferences("Pushed",Context.MODE_PRIVATE)
     private val flPref: SharedPreferences =context.getSharedPreferences("pushed",Context.MODE_PRIVATE)
@@ -282,65 +282,93 @@ class PushedService(private val context : Context, messageReceiverClass: Class<*
             }
             return bitmap
         }
-        fun showNotification(context: Context,pushedNotification: JSONObject){
-            addLogEvent(context ,"Notification: $pushedNotification")
-            val sp =context.getSharedPreferences("Pushed",Context.MODE_PRIVATE)
-            val channel= sp.getString("channel",null) ?: return
-            val id=sp.getInt("pushId",0)+1
-            val body=(pushedNotification["Body"].toString())
-            if(body=="null") return
-            var iconRes=context.resources.getIdentifier(pushedNotification["Logo"].toString(),"mipmap",context.packageName)
-            if(iconRes==0)
-                iconRes=context.resources.getIdentifier(pushedNotification["Logo"].toString(),"drawable",context.packageName)
-            if(iconRes==0)
-                iconRes=context.applicationInfo.icon
-            if(iconRes==0) return
-            val bitmap= getBitmap(context,pushedNotification["Image"].toString())
-            var intent=context.packageManager.getLaunchIntentForPackage(context.packageName)
-            try{
-                if(pushedNotification["Url"].toString() !="null"){
-                    intent=Intent(Intent.ACTION_VIEW, Uri.parse(pushedNotification["Url"].toString()))
-                    intent.flags = Intent.FLAG_ACTIVITY_SINGLE_TOP
-                }
-            } catch (e:Exception){
-                intent=context.packageManager.getLaunchIntentForPackage(context.packageName)
-            }
-            val flags = PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
-            val pendingIntent = PendingIntent.getActivity(context, 0, intent, flags)
-            var title=""
-            if(pushedNotification["Title"].toString()!="null")
-                title=pushedNotification.getString("Title")
-            try {
-                val builder = NotificationCompat.Builder(context, channel).apply {
-                    setSmallIcon(iconRes)
-                    setContentTitle(title)
-                    setContentText(body)
-                    setAutoCancel(true)
-                    setContentIntent(pendingIntent)
-                    priority = NotificationCompat.PRIORITY_MAX
-                    if(bitmap!=null){
-                        setLargeIcon(bitmap)
-                        setStyle(NotificationCompat.BigPictureStyle()
-                            .bigPicture(bitmap)
-                            .bigLargeIcon(null))
-                    }
-                }
-                with(NotificationManagerCompat.from(context)) {
-                    notify(id, builder.build())
-                }
-                sp.edit().putInt("pushId",id).apply()
-            }
-            catch (e:SecurityException) {
-                addLogEvent(context ,"Notify Security Error: ${e.message}")
-            }
-            catch (e:Exception) {
-                addLogEvent(context ,"Notify Error: ${e.message}")
-            }
+      fun showNotification(context: Context, pushedMessage: JSONObject) {
+        val pushedNotification = pushedMessage.optJSONObject("pushedNotification") ?: return
 
+        val sp = context.getSharedPreferences("Pushed", Context.MODE_PRIVATE)
+        val channel = sp.getString("channel", null) ?: return
+        val id = sp.getInt("pushId", 0) + 1
+        val flags = PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+
+        val messageId = pushedMessage.optString("messageId", "unknown")
+        val traceId = pushedMessage.optString("mfTraceId", "")
+        val transport = pushedMessage.optString("transportKind", "Fcm")
+
+        addLogEvent(context, "Notification: $pushedNotification (messageId=$messageId, traceId=$traceId, transport=$transport)")
+
+        val body = pushedNotification.optString("Body", "")
+        if (body == "null" || body.isEmpty()) return
+
+        var iconRes = context.resources.getIdentifier(pushedNotification.optString("Logo"), "mipmap", context.packageName)
+        if (iconRes == 0) iconRes = context.resources.getIdentifier(pushedNotification.optString("Logo"), "drawable", context.packageName)
+        if (iconRes == 0) iconRes = context.applicationInfo.icon
+        if (iconRes == 0) return
+
+        val bitmap = getBitmap(context, pushedNotification.optString("Image"))
+
+        val rawUrl = pushedNotification.optString("Url", "")
+        val url = if (rawUrl != "null") rawUrl else ""
+
+
+        val clickIntent = Intent(context, PushedClickActivity::class.java).apply {
+          putExtra("messageId", messageId)
+          putExtra("transport", transport)
+          putExtra("traceId", traceId)
+          putExtra("url", url)
         }
 
+        val contentPendingIntent = PendingIntent.getActivity(context, id + 1000, clickIntent, flags)
 
-        fun addLogEvent(context: Context? ,event:String){
+        val dismissActionIntent = Intent(context, PushActionReceiver::class.java).apply {
+          action = "ru.pushed.action.DISMISS"
+          putExtra("messageId", messageId)
+          putExtra("transport", transport)
+          putExtra("traceId", traceId)
+        }
+        val dismissBroadcastIntent = PendingIntent.getBroadcast(context, id + 2000, dismissActionIntent, flags)
+
+        val title = pushedNotification.optString("Title", "")
+
+        try {
+          val builder = NotificationCompat.Builder(context, channel).apply {
+            setSmallIcon(iconRes)
+            setContentTitle(title)
+            setContentText(body)
+            setAutoCancel(true)
+            setContentIntent(contentPendingIntent)
+            setDeleteIntent(dismissBroadcastIntent)
+            priority = NotificationCompat.PRIORITY_MAX
+
+            if (bitmap != null) {
+              setLargeIcon(bitmap)
+              setStyle(
+                NotificationCompat.BigPictureStyle()
+                  .bigPicture(bitmap)
+                  .bigLargeIcon(null)
+              )
+            }
+          }
+
+          NotificationManagerCompat.from(context).notify(id, builder.build())
+          sp.edit().putInt("pushId", id).apply()
+
+          val shownIntent = Intent(context, PushActionReceiver::class.java).apply {
+            action = "ru.pushed.action.SHOWN"
+            putExtra("messageId", messageId)
+            putExtra("transport", transport)
+            putExtra("traceId", traceId)
+          }
+          context.sendBroadcast(shownIntent)
+
+        } catch (e: SecurityException) {
+          addLogEvent(context, "Notify Security Error: ${e.message}")
+        } catch (e: Exception) {
+          addLogEvent(context, "Notify Error: ${e.message}")
+        }
+      }
+
+
+      fun addLogEvent(context: Context? ,event:String){
             val sp = context?.getSharedPreferences("Pushed", Context.MODE_PRIVATE)
             if(sp?.getBoolean("enablelogger",false)==true) {
                     val date: String = Calendar.getInstance().time.toString()
@@ -473,17 +501,18 @@ class PushedService(private val context : Context, messageReceiverClass: Class<*
                 addLogEvent(context, "PermissionActivity start error: ${e.message}")
             }
         }
-        
+
         pref.edit().putBoolean("firstrun", false).apply()
         if (pushedToken != null) {
             status = Status.OFFLINE
             pref.edit().putString("listenerclass", messageReceiverClass?.name).apply()
             pref.edit().putString("channel", channel).apply()
+            pref.edit().putBoolean("enablelogger", enableLogger).apply()
 
             messageObserver = Observer<JSONObject> { message: JSONObject? ->
                 if (messageHandler == null || messageHandler?.invoke(message!!) == false) {
                     try {
-                        val notification = JSONObject(message!!["pushedNotification"].toString())
+                        val notification = JSONObject(message!!.toString())
                         showNotification(context, notification)
                     } catch (e: Exception) {
                         addLogEvent(context, "Notification error: ${e.message}")

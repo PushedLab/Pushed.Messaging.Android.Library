@@ -132,8 +132,8 @@ open class BackgroundService : Service(){
     open fun onBackgroundMessage(message: JSONObject){
         Log.d(tag,"Background message: $message")
         try{
-            val notification=JSONObject(message["pushedNotification"].toString())
-            PushedService.showNotification(this,notification )
+            val notification=JSONObject(message.toString())
+            PushedService.showNotification(this,message)
         }
         catch (e:Exception){
             PushedService.addLogEvent(this,"Notification error: ${e.message}")
