@@ -140,6 +140,8 @@ class PushedService(private val context : Context, messageReceiverClass: Class<*
             addLogEvent(context, "Refresh")
             val secretPref = getSecure(context)
             val sp =context.getSharedPreferences("Pushed",Context.MODE_PRIVATE)
+            val currentSDK="1.4.3"
+            val currentOS="Android ${android.os.Build.MANUFACTURER} ${android.os.Build.MODEL} sdk ${Build.VERSION.SDK_INT}"
             var operatingSystem=sp.getString("operatingSystem",null)
             var sdkVersion=sp.getString("sdkVersion",null)
             var displayPushNotificationsPermission:Boolean?=null
@@ -160,14 +162,16 @@ class PushedService(private val context : Context, messageReceiverClass: Class<*
                 }
             }
 
+
+
             val content = JSONObject().apply {
                 put("clientToken", oldPushedToken ?: "")
-                if(operatingSystem!="Android") {
-                    operatingSystem="Android"
+                if(operatingSystem!=currentOS) {
+                    operatingSystem=currentOS
                     put("operatingSystem", operatingSystem)
                 }
-                if(sdkVersion!=Build.VERSION.SDK_INT.toString()){
-                    sdkVersion=Build.VERSION.SDK_INT.toString()
+                if(sdkVersion!=currentSDK){
+                    sdkVersion=currentSDK
                     put("sdkVersion", sdkVersion)
                 }
 

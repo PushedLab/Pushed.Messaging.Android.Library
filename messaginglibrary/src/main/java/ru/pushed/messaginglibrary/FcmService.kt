@@ -46,7 +46,10 @@ class FcmService : FirebaseMessagingService(){
         if(traceId!=null)
             pushedMessage.put("mfTraceId",traceId)
         if(notification!=null)
-            pushedMessage.put("pushedNotification",notification)
+            try{
+                pushedMessage.put("pushedNotification",JSONObject(notification.toString()))
+            } catch (_: Exception){}
+
         PushedService.addLogEvent(this, "Fcm PushedMessage: $pushedMessage")
         if(messageId!=null && messageId!=pref.getString("lastmessage","")){
             pref.edit().putString("lastmessage",messageId).apply()
