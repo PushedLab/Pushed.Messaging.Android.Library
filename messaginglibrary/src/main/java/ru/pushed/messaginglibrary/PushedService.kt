@@ -481,6 +481,7 @@ class PushedService(private val context : Context, messageReceiverClass: Class<*
         pushedToken=secretPref.getString("token",null)
         if(pushedToken==null) pushedToken=pref.getString("token",null)
         if(pushedToken==null) pushedToken=flPref.getString("token",null)
+        if(pushedToken!=null) secretPref.edit().putString("token",pushedToken).apply()
         fcmToken=secretPref.getString("fcmtoken",null)
         ruStoreToken=secretPref.getString("rustoretoken",null)
         hpkToken=secretPref.getString("hpktoken",null)

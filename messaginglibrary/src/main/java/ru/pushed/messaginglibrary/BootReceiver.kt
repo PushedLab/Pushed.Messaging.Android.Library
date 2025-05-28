@@ -14,11 +14,11 @@ class BootReceiver : BroadcastReceiver(){
             val secretPref=PushedService.getSecure(context!!)
             if(secretPref.getString("token","")!="") {
                 try {
-                    if (BackgroundService.active || Build.VERSION.SDK_INT <= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
+                    //if (BackgroundService.active || Build.VERSION.SDK_INT <= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
                         context.startService(Intent(context, BackgroundService::class.java))
                         if(!BackgroundService.active) pref?.edit()?.putBoolean("restarted", true)?.apply()
                         PushedService.addLogEvent(context,"Boot start service")
-                    }
+                    //}
                 } catch (e: Exception) {
                     PushedService.addLogEvent(context,"Boot Err:${e.message}")
                     /*if (!BackgroundService.active) {

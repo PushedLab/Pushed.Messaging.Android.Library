@@ -40,11 +40,11 @@ class WatchdogReceiver: BroadcastReceiver() {
         if(intent?.action==ACTION_RESPAWN){
             val pref=context?.getSharedPreferences("Pushed", Context.MODE_PRIVATE)
             try{
-                if(BackgroundService.active || SDK_INT <= Build.VERSION_CODES.UPSIDE_DOWN_CAKE){
+                //if(BackgroundService.active /*|| SDK_INT <= Build.VERSION_CODES.UPSIDE_DOWN_CAKE*/){
                     context?.startService(Intent(context, BackgroundService::class.java))
                     if(!BackgroundService.active) pref?.edit()?.putBoolean("restarted",true)?.apply()
                     PushedService.addLogEvent(context,"Alarm start service")
-                }
+                //}
             }
             catch (e: Exception){
                 PushedService.addLogEvent(context,"Alarm Err:${e.message}")
