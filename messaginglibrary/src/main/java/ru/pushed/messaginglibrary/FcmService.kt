@@ -6,6 +6,7 @@ import android.util.Log
 import com.google.firebase.messaging.FirebaseMessagingService
 import com.google.firebase.messaging.RemoteMessage
 import org.json.JSONObject
+import java.nio.file.WatchService
 
 class FcmService : FirebaseMessagingService(){
     private val tag="FcmService"
@@ -67,6 +68,7 @@ class FcmService : FirebaseMessagingService(){
                         PushedService.addLogEvent(this,"Notification error: ${e.message}")
                     }
                 }
+                WatchdogReceiver().enqueue(this,5000)
                 if(listenerClassName!=null){
                     val intent = Intent(applicationContext, Class.forName(listenerClassName))
                     intent.action = "ru.pushed.action.MESSAGE"

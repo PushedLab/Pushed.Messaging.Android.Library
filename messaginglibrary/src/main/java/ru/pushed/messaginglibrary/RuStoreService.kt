@@ -49,6 +49,7 @@ class RuStoreService: RuStoreMessagingService(){
                         PushedService.addLogEvent(this,"Notification error: ${e.message}")
                     }
                 }
+                WatchdogReceiver().enqueue(this,5000)
                 if(listenerClassName!=null){
                     val intent = Intent(applicationContext, Class.forName(listenerClassName))
                     intent.action = "ru.pushed.action.MESSAGE"

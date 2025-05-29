@@ -21,7 +21,7 @@ class WatchdogReceiver: BroadcastReceiver() {
 
     }
     fun enqueue(context:Context, millis:Int){
-
+        PushedService.addLogEvent(context,"Alarm sheduled:${millis}")
         val intent = Intent(context, WatchdogReceiver::class.java)
         intent.action = ACTION_RESPAWN
         val manager = context.getSystemService(ALARM_SERVICE) as AlarmManager
@@ -36,7 +36,7 @@ class WatchdogReceiver: BroadcastReceiver() {
 
     override fun onReceive(context: Context?, intent: Intent?) {
         Log.d("WatchDog","Alarm:${BackgroundService.active}")
-        PushedService.addLogEvent(context,"Alarm1:${BackgroundService.active}")
+        PushedService.addLogEvent(context,"Alarm:${BackgroundService.active}")
         if(intent?.action==ACTION_RESPAWN){
             val pref=context?.getSharedPreferences("Pushed", Context.MODE_PRIVATE)
             try{
