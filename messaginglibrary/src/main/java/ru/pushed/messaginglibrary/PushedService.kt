@@ -141,9 +141,13 @@ class PushedService(private val context : Context, messageReceiverClass: Class<*
             val secretPref = getSecure(context)
             val sp =context.getSharedPreferences("Pushed",Context.MODE_PRIVATE)
             val currentSDK="1.4.3"
-            val currentOS="Android ${android.os.Build.MANUFACTURER} ${android.os.Build.MODEL} sdk ${Build.VERSION.SDK_INT}"
+            val currentOS="Android sdk ${Build.VERSION.SDK_INT}"
+            val currentDeviceName="${android.os.Build.MANUFACTURER} ${android.os.Build.MODEL}"
+
             var operatingSystem=sp.getString("operatingSystem",null)
             var sdkVersion=sp.getString("sdkVersion",null)
+            var deviceName=sp.getString("deviceName",null)
+
             var displayPushNotificationsPermission:Boolean?=null
             var backgroundWorkPermission:Boolean?=null
             if(!oldPushedToken.isNullOrEmpty()){
@@ -173,6 +177,11 @@ class PushedService(private val context : Context, messageReceiverClass: Class<*
                 if(sdkVersion!=currentSDK){
                     sdkVersion=currentSDK
                     put("sdkVersion", sdkVersion)
+                }
+
+                if(deviceName!=currentDeviceName){
+                    deviceName=currentDeviceName
+                    put("mobileDeviceName", deviceName)
                 }
 
                 if (deviceSettings.length() > 0) {
@@ -250,6 +259,7 @@ class PushedService(private val context : Context, messageReceiverClass: Class<*
                             sp.edit().apply {
                                 putString("operatingSystem",operatingSystem)
                                 putString("sdkVersion",sdkVersion)
+                                putString("deviceName",deviceName)
                                 putBoolean("backgroundWorkPermission",backgroundWorkPermission ?: false)
                                 putBoolean("displayPushNotificationsPermission",displayPushNotificationsPermission ?: false)
                                 apply()
