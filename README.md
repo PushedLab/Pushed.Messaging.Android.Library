@@ -23,7 +23,7 @@ allprojects {
 
 ```gradle
     dependencies {
-	implementation 'com.github.PushedLab:Pushed.Messaging.Android.Library:1.4.2'
+	implementation 'com.github.PushedLab:Pushed.Messaging.Android.Library:1.4.4'
     }
 ``` 
 
