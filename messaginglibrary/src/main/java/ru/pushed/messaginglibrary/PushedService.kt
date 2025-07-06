@@ -59,7 +59,15 @@ enum class Status(val value: Int){
 }
 
 
-class PushedService(private val context : Context, messageReceiverClass: Class<*>?, channel:String?="messages",enableLogger:Boolean=true, askPermissions:Boolean=true,enableServerLogger:Boolean=false) {
+class PushedService(
+    private val context : Context,
+    messageReceiverClass: Class<*>?,
+    channel:String? = "messages",
+    enableLogger:Boolean = true,
+    askPermissions:Boolean = true,
+    enableServerLogger:Boolean = false,
+    private val applicationId:String? = null
+) {
     private val tag="Pushed Service"
     private val pref: SharedPreferences =context.getSharedPreferences("Pushed",Context.MODE_PRIVATE)
     private val flPref: SharedPreferences =context.getSharedPreferences("pushed",Context.MODE_PRIVATE)
@@ -135,6 +143,7 @@ class PushedService(private val context : Context, messageReceiverClass: Class<*
             fcmToken: String? = null,
             hpkToken: String? = null,
             ruStoreToken: String? = null,
+            applicationId: String? = null,
             callback: ((String?) -> Unit)? = null
         ) {
             addLogEvent(context, "Refresh")
@@ -166,8 +175,6 @@ class PushedService(private val context : Context, messageReceiverClass: Class<*
                 }
             }
 
-
-
             val content = JSONObject().apply {
                 put("clientToken", oldPushedToken ?: "")
                 if(operatingSystem!=currentOS) {
@@ -178,6 +185,8 @@ class PushedService(private val context : Context, messageReceiverClass: Class<*
                     sdkVersion=currentSDK
                     put("sdkVersion", sdkVersion)
                 }
+                
+                
 
                 if(deviceName!=currentDeviceName){
                     deviceName=currentDeviceName
@@ -186,6 +195,10 @@ class PushedService(private val context : Context, messageReceiverClass: Class<*
 
                 if (deviceSettings.length() > 0) {
                     put("deviceSettings", deviceSettings)
+                }
+
+                if (!applicationId.isNullOrEmpty()) {
+                    put("applicationId", applicationId)
                 }
 
                 try {
@@ -494,6 +507,7 @@ class PushedService(private val context : Context, messageReceiverClass: Class<*
         if(pushedToken!=null) secretPref.edit().putString("token",pushedToken).apply()
         fcmToken=secretPref.getString("fcmtoken",null)
         ruStoreToken=secretPref.getString("rustoretoken",null)
+        addLogEvent(context, "Initial RuStoreToken: $ruStoreToken")
         hpkToken=secretPref.getString("hpktoken",null)
         pushedToken=getNewToken()
         addLogEvent(context,"Pushed Token: $pushedToken")
@@ -667,6 +681,9 @@ class PushedService(private val context : Context, messageReceiverClass: Class<*
       if(oldToken==null)
         oldToken = secretPref.getString("token", null)
 
+      // Debug information about current tokens before attempting refresh
+      addLogEvent(context, "getNewToken(): oldToken=$oldToken, ruStoreToken=$ruStoreToken, fcmToken=$fcmToken, hpkToken=$hpkToken")
+
       // Если токена ещё ни разу не было — снимаем ограничения StrictMode
       val isFirstTokenRequest = oldToken.isNullOrEmpty()
 
@@ -677,7 +694,7 @@ class PushedService(private val context : Context, messageReceiverClass: Class<*
         val latch = CountDownLatch(1)
         var resultToken: String? = oldToken
 
-        refreshToken(context, oldToken, fcmToken, hpkToken, ruStoreToken) { newToken ->
+        refreshToken(context, oldToken, fcmToken, hpkToken, ruStoreToken, applicationId) { newToken ->
           if (!newToken.isNullOrEmpty()) {
             resultToken = newToken
             pushedToken = newToken
@@ -690,7 +707,7 @@ class PushedService(private val context : Context, messageReceiverClass: Class<*
       }
 
       // Если уже есть старый токен — просто обновляем его асинхронно
-      refreshToken(context, oldToken, fcmToken, hpkToken, ruStoreToken) { newToken ->
+      refreshToken(context, oldToken, fcmToken, hpkToken, ruStoreToken, applicationId) { newToken ->
           if (!newToken.isNullOrEmpty()) {
             pushedToken = newToken
           }
