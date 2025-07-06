@@ -9,6 +9,36 @@ import ru.rustore.sdk.pushclient.messaging.service.RuStoreMessagingService
 
 class RuStoreService: RuStoreMessagingService(){
     private val tag="RuStoreService"
+
+    /**
+     * Called by the RuStore Push SDK when the device token is refreshed.
+     *
+     * If the new token differs from the previously saved one, we request a
+     * new Pushed client token in the same way as it is done for FCM via
+     * [FcmService.onNewToken].
+     */
+    override fun onNewToken(token: String) {
+        Log.d(tag, "RuStore refreshed token: $token")
+        PushedService.addLogEvent(this, "RuStore change token: $token")
+
+        // Retrieve previously saved tokens
+        val secret = PushedService.getSecure(this)
+        val oldRuStoreToken = secret.getString("rustoretoken", null)
+        val oldToken = secret.getString("token", null)
+        PushedService.addLogEvent(this, "RuStore $oldRuStoreToken,$oldToken")
+
+        // If the token has really changed and we already have a Pushed token,
+        // ask the backend to refresh it with the new RuStore token
+        if (token != oldRuStoreToken && oldToken != null && oldRuStoreToken != null) { 
+            Log.d(tag, "RuStore refresh token: $token")
+            PushedService.refreshToken(
+                context = this,
+                oldPushedToken = oldToken,
+                ruStoreToken = token
+            )
+        }
+    }
+
     override fun onMessageReceived(message: RemoteMessage) {
         val pref=getSharedPreferences("Pushed", Context.MODE_PRIVATE)
         PushedService.addLogEvent(this, "RuStore Message: ${message.data}")

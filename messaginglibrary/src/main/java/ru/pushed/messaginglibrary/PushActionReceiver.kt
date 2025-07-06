@@ -23,7 +23,7 @@ class PushActionReceiver : BroadcastReceiver() {
       "ru.pushed.action.CLICK" -> {
         PushedService.addLogEvent(context, "Action CLICK → tracking 'Click' interaction")
         send(context, messageId, "Click")
-
+        PushedService.confirmDelivered(context, messageId, transport, traceId)
         // Запускаем сохранённый интент
         val clickIntent: Intent? = intent.getParcelableExtra("clickIntent")
         if (clickIntent != null) {
@@ -44,7 +44,8 @@ class PushActionReceiver : BroadcastReceiver() {
       }
 
       "ru.pushed.action.SHOWN" -> {
-        PushedService.addLogEvent(context, "Action SHOWN → tracking 'Show' interaction")
+        PushedService.addLogEvent(context, "Action SHOWN → tracking 'Show' interaction") 
+        PushedService.confirmDelivered(context, messageId, transport, traceId)
         send(context, messageId, "Show")
       }
 

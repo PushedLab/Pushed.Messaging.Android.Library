@@ -2,7 +2,7 @@
 
 Android library to use the Pushed Messaging.
 
-To learn more about Pushed Messaging, please visit the [Pushed website](https://pushed.ru)
+To learn more about Pushed Messaging, please visit the [Pushed website](https://pushed.dev)
 
 ## Getting Started
 
@@ -144,7 +144,7 @@ For init library you need create instace of PushedService
 // channel - notification channel (if cahnnel == null The library will not show notifications)
 // enableLogger - Allows the library to save a local log for debugging purposes
 // askPermissions -  If set to true, permissions to work in the background and display notifications are automatically requested.
-PushedService(private val context : Context, messageReceiverClass: Class<*>?,channel:String?="messages",enableLogger:Boolean=false, askPermissions:Boolean=true);
+PushedService(private val context : Context, messageReceiverClass: Class<*>?,channel:String?="messages",enableLogger:Boolean=false, askPermissions:Boolean=true, applicationId = "YOUR_APPLICATION_ID");
 
 ```
 
