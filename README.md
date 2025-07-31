@@ -6,10 +6,10 @@ To learn more about Pushed Messaging, please visit the [Pushed website](https://
 
 ## Getting Started
 
-**Step 1.** Add JitPack to your root `build.gradle` file:
+**Step 1.** Add required repositories to your root `settings.gradle` file:
 
 ```gradle
-// settings.gradle or build.gradle (for older Gradle versions)
+// settings.gradle
 dependencyResolutionManagement {
     repositoriesMode.set(RepositoriesMode.FAIL_ON_PROJECT_REPOS)
     repositories {
@@ -29,88 +29,54 @@ dependencies {
 }
 ```
 
-## Adding Push Service Providers (Optional)
+## Configuring Push Service Providers
 
-The library is designed to be modular. You only need to include the dependencies for the push services you intend to use.
+By default, the library includes dependencies for FCM, HPK, and RuStore Push for backward compatibility. If you don't need all of them, you can easily exclude them.
 
-### Firebase Cloud Messaging (FCM)
+**This is the recommended approach for optimizing your app size.**
 
-1.  Add the FCM dependency to your `app/build.gradle`:
-    ```gradle
-    dependencies {
-        ...
-        implementation 'com.google.firebase:firebase-messaging:24.1.0'
+### Excluding Unused Providers
+
+In your app's `build.gradle`, modify the library dependency to exclude the providers you don't need.
+
+```gradle
+dependencies {
+    implementation('com.github.PushedLab:Pushed.Messaging.Android.Library:1.4.6') {
+        // Example: Exclude HPK and RuStore, keeping only FCM
+        exclude group: 'com.huawei.hms', module: 'push'
+        exclude group: 'ru.rustore.sdk', module: 'pushclient'
     }
-    ```
 
-2.  Apply the Google Services plugin in your `app/build.gradle`:
-    ```gradle
-    plugins {
-        ...
-        id 'com.google.gms.google-services'
+    // If you need to exclude FCM, you have to exclude its components too
+    implementation('com.github.PushedLab:Pushed.Messaging.Android.Library:1.4.6') {
+        exclude group: 'com.google.firebase', module: 'firebase-messaging'
     }
-    ```
+}
+```
 
-3.  Add the plugin classpath to your root `build.gradle`:
-    ```gradle
-    buildscript {
-        dependencies {
-            classpath 'com.google.gms:google-services:4.4.2' // Use the latest version
-        }
-    }
-    ```
+When you exclude a provider, remember to also set its corresponding flag to `false` during `PushedService` initialization.
 
-4.  Place your `google-services.json` file in the `app/` directory.
+### Provider-specific Setup
 
-### Huawei Push Kit (HPK)
+If you are using a provider, you still need to perform its specific setup (e.g., adding plugins and config files).
 
-1.  Add the HPK dependency to your `app/build.gradle`:
-    ```gradle
-    dependencies {
-        ...
-        implementation 'com.huawei.hms:push:6.12.0.300'
-    }
-    ```
+#### Firebase Cloud Messaging (FCM)
 
-2.  Apply the AGConnect plugin in your `app/build.gradle`:
-    ```gradle
-    plugins {
-        ...
-        id 'com.huawei.agconnect'
-    }
-    ```
+1.  **Plugin:** Apply the Google Services plugin in `app/build.gradle` (`id 'com.google.gms.google-services'`) and add the classpath to your root `build.gradle`.
+2.  **Config File:** Place your `google-services.json` file in the `app/` directory.
 
-3.  Add the plugin classpath to your root `build.gradle`:
-    ```gradle
-    buildscript {
-        dependencies {
-            classpath 'com.huawei.agconnect:agcp:1.9.1.300' // Use the latest version
-        }
-    }
-    ```
-    *(Note: The Huawei repository should already be added in Step 1 of "Getting Started")*
+#### Huawei Push Kit (HPK)
 
-4.  Place your `agconnect-services.json` file in the `app/` directory.
+1.  **Plugin:** Apply the AGConnect plugin in `app/build.gradle` (`id 'com.huawei.agconnect'`) and add the classpath to your root `build.gradle`.
+2.  **Config File:** Place your `agconnect-services.json` file in the `app/` directory.
 
-### RuStore Push
+#### RuStore Push
 
-1.  Add the RuStore Push Client dependency to your `app/build.gradle`:
-    ```gradle
-    dependencies {
-        ...
-        implementation 'ru.rustore.sdk:pushclient:6.3.0'
-    }
-    ```
-
-2.  Add your project ID to `AndroidManifest.xml`:
+1.  **Config:** Add your project ID to `AndroidManifest.xml` inside the `<application>` tag.
     ```xml
-    <application>
-        ...
-        <meta-data
-            android:name="ru.rustore.sdk.pushclient.project_id"
-            android:value="Your RuStore project ID" />
-        ...
-    </application>
+    <meta-data
+        android:name="ru.rustore.sdk.pushclient.project_id"
+        android:value="Your RuStore project ID" />
     ```
 
 ## Basic Setup
@@ -146,17 +112,14 @@ class MyMessageReceiver : MessageReceiver() {
 
 ### Initializing the Service
 
-Create an instance of `PushedService` in your Activity or Application class. Use the flags `enableFcm`, `enableHpk`, and `enableRuStore` to control which push providers are initialized.
+Create an instance of `PushedService` in your Activity or Application class. The library automatically detects which push providers are available based on the dependencies you've included in your project.
 
 ```kotlin
 // In your Activity's onCreate
 pushedService = PushedService(
     context = this,
     messageReceiverClass = MyMessageReceiver::class.java,
-    channel = "messages", // Notification channel for pushes shown by the library
-    enableFcm = true,     // Initialize FCM if its dependency is present
-    enableHpk = true,     // Initialize HPK if its dependency is present
-    enableRuStore = true  // Initialize RuStore if its dependency is present
+    channel = "messages" // Notification channel for pushes shown by the library
 )
 ```
 
@@ -167,9 +130,6 @@ pushedService = PushedService(
 *   `enableLogger`: `Boolean` - Enables local logging for debugging.
 *   `askPermissions`: `Boolean` - If `true`, the library will automatically request permissions for notifications and background work on the first launch.
 *   `applicationId`: `String?` - Your Application ID from the Pushed panel.
-*   `enableFcm`: `Boolean` - Enables initialization of Firebase Cloud Messaging.
-*   `enableHpk`: `Boolean` - Enables initialization of Huawei Push Kit.
-*   `enableRuStore`: `Boolean` - Enables initialization of RuStore Push.
 
 ### Handling Foreground Messages
 
