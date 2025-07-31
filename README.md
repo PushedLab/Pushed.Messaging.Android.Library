@@ -25,7 +25,7 @@ dependencyResolutionManagement {
 
 ```gradle
 dependencies {
-    implementation 'com.github.PushedLab:Pushed.Messaging.Android.Library:1.4.5' // Check for the latest version
+    implementation 'com.github.PushedLab:Pushed.Messaging.Android.Library:1.4.6' // Check for the latest version
 }
 ```
 
