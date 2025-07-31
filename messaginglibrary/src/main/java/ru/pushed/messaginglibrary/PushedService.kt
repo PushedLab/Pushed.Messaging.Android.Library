@@ -67,10 +67,7 @@ class PushedService(
     enableLogger:Boolean = true,
     askPermissions:Boolean = true,
     enableServerLogger:Boolean = false,
-    private val applicationId:String? = null,
-    private val enableRuStore:Boolean = true,
-    private val enableFcm:Boolean = true,
-    private val enableHpk:Boolean = true
+    private val applicationId:String? = null
 ) {
     private val tag="Pushed Service"
     private val pref: SharedPreferences =context.getSharedPreferences("Pushed",Context.MODE_PRIVATE)
@@ -509,6 +506,34 @@ class PushedService(
         }
 
     }
+
+    private fun isFcmPresent(): Boolean {
+        return try {
+            Class.forName("com.google.firebase.messaging.FirebaseMessaging")
+            true
+        } catch (e: ClassNotFoundException) {
+            false
+        }
+    }
+
+    private fun isHpkPresent(): Boolean {
+        return try {
+            Class.forName("com.huawei.hms.push.HmsMessageService")
+            true
+        } catch (e: ClassNotFoundException) {
+            false
+        }
+    }
+
+    private fun isRuStorePresent(): Boolean {
+        return try {
+            Class.forName("ru.rustore.sdk.pushclient.RuStorePushClient")
+            true
+        } catch (e: ClassNotFoundException) {
+            false
+        }
+    }
+
     init{
         pref.edit().putBoolean("enablelogger", enableLogger).apply()
         pref.edit().putBoolean("enableserverlogger", enableServerLogger).apply()
@@ -568,7 +593,8 @@ class PushedService(
             }
             messageLiveData?.observeForever(messageObserver!!)
             //Fcm (optional)
-            if(enableFcm) {
+            if(isFcmPresent()) {
+                addLogEvent(context, "Fcm dependency found. Initializing.")
                 try{
                     FirebaseMessaging.getInstance().token.addOnCompleteListener { task ->
                         if (task.isSuccessful) {
@@ -587,11 +613,12 @@ class PushedService(
                     addLogEvent(context, "Fcm init Error: ${e.message}")
                 }
             } else {
-                addLogEvent(context, "Fcm disabled by configuration")
+                addLogEvent(context, "Fcm dependency not found. Skipping initialization.")
             }
 
             //RuStore (optional)
-            if(enableRuStore) {
+            if(isRuStorePresent()) {
+                addLogEvent(context, "RuStore dependency found. Initializing.")
                 try {
                     RuStorePushClient.getToken().addOnSuccessListener { token: String ->
                         addLogEvent(context, "RuStore Token: $token")
@@ -604,11 +631,12 @@ class PushedService(
                     addLogEvent(context, "RuStore init Error: ${e.message}")
                 }
             } else {
-                addLogEvent(context, "RuStore disabled by configuration")
+                addLogEvent(context, "RuStore dependency not found. Skipping initialization.")
             }
 
             //Hpk (optional)
-            if(enableHpk) {
+            if(isHpkPresent()) {
+                addLogEvent(context, "Hpk dependency found. Initializing.")
                 try{
                     val hmsResult=HuaweiApiAvailability.getInstance().isHuaweiMobileServicesAvailable(context)
                     addLogEvent(context, "HMS Core: $hmsResult")
@@ -632,7 +660,7 @@ class PushedService(
                     addLogEvent(context, "HMS Core init Error: ${e.message}")
                 }
             } else {
-                addLogEvent(context, "Hpk disabled by configuration")
+                addLogEvent(context, "Hpk dependency not found. Skipping initialization.")
             }
         }
     }

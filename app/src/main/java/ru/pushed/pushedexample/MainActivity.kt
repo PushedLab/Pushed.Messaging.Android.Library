@@ -76,9 +76,6 @@ class MainActivity : AppCompatActivity() {
         pushedService = PushedService(
             this,
             MyMessageReceiver::class.java,
-            enableRuStore = false, 
-            enableFcm = false, 
-            enableHpk = false
         )
 
         restartButton.setOnClickListener{
