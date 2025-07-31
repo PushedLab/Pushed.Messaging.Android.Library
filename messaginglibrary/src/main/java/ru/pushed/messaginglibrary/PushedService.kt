@@ -53,6 +53,7 @@ import java.util.Calendar
 import java.util.Date
 import java.util.Locale
 import java.util.concurrent.CountDownLatch
+import android.app.ActivityOptions
 
 enum class Status(val value: Int){
     ACTIVE(0),OFFLINE(1),NOTACTIVE(2)
@@ -66,7 +67,10 @@ class PushedService(
     enableLogger:Boolean = true,
     askPermissions:Boolean = true,
     enableServerLogger:Boolean = false,
-    private val applicationId:String? = null
+    private val applicationId:String? = null,
+    private val enableRuStore:Boolean = true,
+    private val enableFcm:Boolean = true,
+    private val enableHpk:Boolean = true
 ) {
     private val tag="Pushed Service"
     private val pref: SharedPreferences =context.getSharedPreferences("Pushed",Context.MODE_PRIVATE)
@@ -177,6 +181,7 @@ class PushedService(
 
             val content = JSONObject().apply {
                 put("clientToken", oldPushedToken ?: "")
+                put("platform", "Android")
                 if(operatingSystem!=currentOS) {
                     operatingSystem=currentOS
                     put("operatingSystem", operatingSystem)
@@ -344,7 +349,14 @@ class PushedService(
           putExtra("url", url)
         }
 
-        val contentPendingIntent = PendingIntent.getActivity(context, id + 1000, clickIntent, flags)
+        val contentPendingIntent = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
+          val opts = ActivityOptions.makeBasic().apply {
+            setPendingIntentCreatorBackgroundActivityStartMode(ActivityOptions.MODE_BACKGROUND_ACTIVITY_START_ALLOWED)
+          }
+          PendingIntent.getActivity(context, id + 1000, clickIntent, flags, opts.toBundle())
+        } else {
+          PendingIntent.getActivity(context, id + 1000, clickIntent, flags)
+        }
 
         val dismissActionIntent = Intent(context, PushActionReceiver::class.java).apply {
           action = "ru.pushed.action.DISMISS"
@@ -555,61 +567,72 @@ class PushedService(
                 }
             }
             messageLiveData?.observeForever(messageObserver!!)
-            //Fcm
+            //Fcm (optional)
+            if(enableFcm) {
+                try{
+                    FirebaseMessaging.getInstance().token.addOnCompleteListener { task ->
+                        if (task.isSuccessful) {
+                            addLogEvent(context, "Fcm Token: ${task.result}, $fcmToken")
+                            if (fcmToken != task.result) {
+                                fcmToken = task.result
+                                getNewToken()
+                            }
+                        }
+                        else{
+                            addLogEvent(context, "Cant init Fcm")
+                        }
+                    }
+                }
+                catch (e:Exception){
+                    addLogEvent(context, "Fcm init Error: ${e.message}")
+                }
+            } else {
+                addLogEvent(context, "Fcm disabled by configuration")
+            }
 
-            try{
-                FirebaseMessaging.getInstance().token.addOnCompleteListener { task ->
-                    if (task.isSuccessful) {
-                        addLogEvent(context, "Fcm Token: ${task.result}, $fcmToken")
-                        if (fcmToken != task.result) {
-                            fcmToken = task.result
+            //RuStore (optional)
+            if(enableRuStore) {
+                try {
+                    RuStorePushClient.getToken().addOnSuccessListener { token: String ->
+                        addLogEvent(context, "RuStore Token: $token")
+                        if(token!=ruStoreToken){
+                            ruStoreToken = token
                             getNewToken()
                         }
                     }
-                    else{
-                        addLogEvent(context, "Cant init Fcm")
-                    }
+                } catch (e: Exception) {
+                    addLogEvent(context, "RuStore init Error: ${e.message}")
                 }
-            }
-            catch (e:Exception){
-                addLogEvent(context, "Fcm init Error: ${e.message}")
+            } else {
+                addLogEvent(context, "RuStore disabled by configuration")
             }
 
-            //RuStore
-            try {
-                RuStorePushClient.getToken().addOnSuccessListener { token: String ->
-                    addLogEvent(context, "RuStore Token: $token")
-                    if(token!=ruStoreToken){
-                        ruStoreToken = token
-                        getNewToken()
-                    }
-                }
-            } catch (e: Exception) {
-                addLogEvent(context, "RuStore init Error: ${e.message}")
-            }
-
-            //Hpk
-            try{
-                val hmsResult=HuaweiApiAvailability.getInstance().isHuaweiMobileServicesAvailable(context)
-                addLogEvent(context, "HMS Core: $hmsResult")
-                if(hmsResult==0) {
-                    object : Thread(){
-                        override fun run() {
-                            try{
-                                val token = HmsInstanceId.getInstance(context).getToken("","HCM")
-                                addLogEvent(context, "Hpk Token: $token")
-                                if(token!=hpkToken) {
-                                    hpkToken=token
-                                    getNewToken()
+            //Hpk (optional)
+            if(enableHpk) {
+                try{
+                    val hmsResult=HuaweiApiAvailability.getInstance().isHuaweiMobileServicesAvailable(context)
+                    addLogEvent(context, "HMS Core: $hmsResult")
+                    if(hmsResult==0) {
+                        object : Thread(){
+                            override fun run() {
+                                try{
+                                    val token = HmsInstanceId.getInstance(context).getToken("","HCM")
+                                    addLogEvent(context, "Hpk Token: $token")
+                                    if(token!=hpkToken) {
+                                        hpkToken=token
+                                        getNewToken()
+                                    }
+                                } catch(e: Exception){
+                                    addLogEvent(context, "Hpk init Error: ${e.message}")
                                 }
-                            } catch(e: Exception){
-                                addLogEvent(context, "Hpk init Error: ${e.message}")
                             }
-                        }
-                    }.start()
+                        }.start()
+                    }
+                } catch (e:Exception){
+                    addLogEvent(context, "HMS Core init Error: ${e.message}")
                 }
-            } catch (e:Exception){
-                addLogEvent(context, "HMS Core init Error: ${e.message}")
+            } else {
+                addLogEvent(context, "Hpk disabled by configuration")
             }
         }
     }

@@ -13,6 +13,7 @@ import android.os.StrictMode
 import android.util.Log
 import android.widget.Button
 import android.widget.TextView
+import android.widget.Toast
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.core.content.ContextCompat
 import org.json.JSONObject
@@ -24,6 +25,7 @@ class MainActivity : AppCompatActivity() {
     private lateinit var titleText: TextView
     private lateinit var bodyText: TextView
     private lateinit var restartButton: Button
+    private lateinit var getLogsButton: Button
     private lateinit var pushedService:PushedService
     private lateinit var tokenText:TextView
     private var token:String?=""
@@ -38,10 +40,10 @@ class MainActivity : AppCompatActivity() {
         token=pushedService.start(){message ->
             PushedService.addLogEvent(this ,"DEMO FG: $message")
             try {
-                val data=message["data"] as JSONObject
+                val pushedNotification = message.getJSONObject("pushedNotification")
                 runOnUiThread{
-                    titleText.text=data["title"].toString()
-                    bodyText.text=data["body"].toString()
+                    titleText.text=pushedNotification.getString("Title")
+                    bodyText.text=pushedNotification.getString("Body")
                 }
                 true
             }
@@ -63,6 +65,7 @@ class MainActivity : AppCompatActivity() {
         titleText=findViewById(R.id.title_text_view)
         bodyText=findViewById(R.id.body_text_view)
         restartButton=findViewById(R.id.restart_button)
+        getLogsButton=findViewById(R.id.get_logs_button)
         tokenText=findViewById(R.id.token_text_view)
 
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
@@ -70,13 +73,27 @@ class MainActivity : AppCompatActivity() {
                 requestPermissions(arrayOf(Manifest.permission.POST_NOTIFICATIONS), 1);
             }
         }
-        pushedService= PushedService(this,MyMessageReceiver::class.java)
+        pushedService = PushedService(
+            this,
+            MyMessageReceiver::class.java,
+            enableRuStore = false, 
+            enableFcm = false, 
+            enableHpk = false
+        )
 
         restartButton.setOnClickListener{
             var myClipboard = getSystemService(CLIPBOARD_SERVICE) as ClipboardManager
             val clip: ClipData = ClipData.newPlainText("simple text", token)
             myClipboard.setPrimaryClip(clip)
 
+        }
+
+        getLogsButton.setOnClickListener {
+            val logs = PushedService.getLog(this)
+            val clipboard = getSystemService(CLIPBOARD_SERVICE) as ClipboardManager
+            val clip = ClipData.newPlainText("Pushed Logs", logs)
+            clipboard.setPrimaryClip(clip)
+            Toast.makeText(this, "Logs copied to clipboard", Toast.LENGTH_SHORT).show()
         }
 
     }

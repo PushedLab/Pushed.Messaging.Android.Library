@@ -10,6 +10,12 @@ class PushedClickActivity : Activity() {
   override fun onCreate(savedInstanceState: Bundle?) {
     super.onCreate(savedInstanceState)
 
+    // Логируем факт запуска Activity по нажатию на уведомление
+    PushedService.addLogEvent(
+      this,
+      "PushedClickActivity launched with extras: " + intent.extras?.keySet()?.associateWith { intent.getStringExtra(it) }
+    )
+
     val messageId  = intent.getStringExtra("messageId") ?: return finish()
     val transport  = intent.getStringExtra("transport") ?: "Fcm"
     val traceId    = intent.getStringExtra("traceId")   ?: ""

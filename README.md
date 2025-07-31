@@ -6,186 +6,209 @@ To learn more about Pushed Messaging, please visit the [Pushed website](https://
 
 ## Getting Started
 
-If you are using Gradle to get a GitHub project into your build, you will need to:
-
-**Step 1.** Add it in your root build.gradle at the end of repositories 
+**Step 1.** Add JitPack to your root `build.gradle` file:
 
 ```gradle
-allprojects {
-	repositories {
-		...
-		maven { url 'https://jitpack.io' }
-	}
-}
-```
-
-**Step 2.** Add the dependency
-
-```gradle
-    dependencies {
-	implementation 'com.github.PushedLab:Pushed.Messaging.Android.Library:1.4.4'
-    }
-``` 
-
-**Step 3.** Create your own Class extends MessageReceiver class and override onBackgroundMessage(Context?,JSONObject) 
-for handle messages even when your application is not running.
-
-```kotlin
-class MyMessageReceiver : MessageReceiver() {
-    override fun onBackgroundMessage(context: Context?,message: JSONObject) {
-        Log.d("Mybackground","MyBackground message: $message")
-    }
-```
-
-**Step 4.** Add the following to your app's AndroidManifest.xml
-
-```xml
-    <application>
-    ...
-        <receiver
-            android:name=".MyMessageReceiver"                                               
-            android:enabled="true"
-            android:exported="true">
-            <intent-filter>
-                <action android:name="ru.pushed.action.MESSAGE" />
-            </intent-filter>
-        </receiver>
-    ...
-    </application>
-```
-
-For support Fcm, you must follow these steps:
-
-**Step 1.** Add it in your root build.gradle add this dependencies 
-
-```gradle
-buildscript {
-...
-    dependencies {
-        classpath 'com.google.gms:google-services:4.4.2'
-        ...
-    }
-}
-
-```
-
-**Step 2.** Place your google-services.json in Android/app folder
-
-**Step 3.** Add it in your app/build.gradle add this plugins 
-
-```gradle
-...
-apply plugin: 'com.google.gms.google-services'
-```
-
-For support Hpk, you must follow these steps:
-
-**Step 1.** Add it in your root build.gradle add this 
-
-```gradle
-buildscript {
-...
+// settings.gradle or build.gradle (for older Gradle versions)
+dependencyResolutionManagement {
+    repositoriesMode.set(RepositoriesMode.FAIL_ON_PROJECT_REPOS)
     repositories {
-        ...
-        maven { url 'https://developer.huawei.com/repo/' }
-    }
-    dependencies {
-        classpath 'com.huawei.agconnect:agcp:1.9.1.300'
-        ...
+        google()
+        mavenCentral()
+        maven { url 'https://jitpack.io' }
+        maven { url 'https://developer.huawei.com/repo/' } // Needed for HPK
     }
 }
-allprojects {
-    repositories {
-        ...
-        maven { url 'https://developer.huawei.com/repo/' }
-    }
-}
-
 ```
 
-**Step 2.** Place your agconnect-services.json in Android/app folder
-
-**Step 3.** Add it in your app/build.gradle add this 
+**Step 2.** Add the library dependency to your app's `build.gradle`:
 
 ```gradle
-...
 dependencies {
-    ...
-    implementation 'com.huawei.hms:push:6.12.0.300'
+    implementation 'com.github.PushedLab:Pushed.Messaging.Android.Library:1.4.5' // Check for the latest version
 }
-...
-apply plugin: 'com.huawei.agconnect' 
 ```
 
-On Android, to support RuStore, you need to add the following to your AndroidManifest.xml
+## Adding Push Service Providers (Optional)
 
-```xml
+The library is designed to be modular. You only need to include the dependencies for the push services you intend to use.
+
+### Firebase Cloud Messaging (FCM)
+
+1.  Add the FCM dependency to your `app/build.gradle`:
+    ```gradle
+    dependencies {
+        ...
+        implementation 'com.google.firebase:firebase-messaging:24.1.0'
+    }
+    ```
+
+2.  Apply the Google Services plugin in your `app/build.gradle`:
+    ```gradle
+    plugins {
+        ...
+        id 'com.google.gms.google-services'
+    }
+    ```
+
+3.  Add the plugin classpath to your root `build.gradle`:
+    ```gradle
+    buildscript {
+        dependencies {
+            classpath 'com.google.gms:google-services:4.4.2' // Use the latest version
+        }
+    }
+    ```
+
+4.  Place your `google-services.json` file in the `app/` directory.
+
+### Huawei Push Kit (HPK)
+
+1.  Add the HPK dependency to your `app/build.gradle`:
+    ```gradle
+    dependencies {
+        ...
+        implementation 'com.huawei.hms:push:6.12.0.300'
+    }
+    ```
+
+2.  Apply the AGConnect plugin in your `app/build.gradle`:
+    ```gradle
+    plugins {
+        ...
+        id 'com.huawei.agconnect'
+    }
+    ```
+
+3.  Add the plugin classpath to your root `build.gradle`:
+    ```gradle
+    buildscript {
+        dependencies {
+            classpath 'com.huawei.agconnect:agcp:1.9.1.300' // Use the latest version
+        }
+    }
+    ```
+    *(Note: The Huawei repository should already be added in Step 1 of "Getting Started")*
+
+4.  Place your `agconnect-services.json` file in the `app/` directory.
+
+### RuStore Push
+
+1.  Add the RuStore Push Client dependency to your `app/build.gradle`:
+    ```gradle
+    dependencies {
+        ...
+        implementation 'ru.rustore.sdk:pushclient:6.3.0'
+    }
+    ```
+
+2.  Add your project ID to `AndroidManifest.xml`:
+    ```xml
     <application>
-    ...
+        ...
         <meta-data
             android:name="ru.rustore.sdk.pushclient.project_id"
             android:value="Your RuStore project ID" />
-    ...
+        ...
     </application>
-```
+    ```
 
+## Basic Setup
 
-### Implementation
-
-For init library you need create instace of PushedService 
-
-```kotlin
-        pushedService= PushedService(this,MyMessageReceiver::class.java)
-```
+**Step 1.** Create a `MessageReceiver` to handle background messages.
 
 ```kotlin
-// context - Context
-// messageReceiverClass - your own messageReceiverClass class
-// channel - notification channel (if cahnnel == null The library will not show notifications)
-// enableLogger - Allows the library to save a local log for debugging purposes
-// askPermissions -  If set to true, permissions to work in the background and display notifications are automatically requested.
-PushedService(private val context : Context, messageReceiverClass: Class<*>?,channel:String?="messages",enableLogger:Boolean=false, askPermissions:Boolean=true, applicationId = "YOUR_APPLICATION_ID");
-
-```
-
-If you need to request permissions yourself, use the askPermissions method.
-
-```kotlin
-// askNotification - Ask permissions to display notifications
-// askBackgroundWork - Ask permissions to work in the background
-PushedService.askPermissions(askNotification:Boolean=true,askBackgroundWork:Boolean=true)
-```
-
-To start a service or bind to an active service, you need to call PushedService.start.
-
-```kotlin
-    override fun onResume() {
-        super.onResume()
-        // token - To send a message to a specific user, you need to know his Client token.
-        token=pushedService.start(){message ->
-            Log.d("MyActivity","Message received: $message")
-            //return true if message handled.
-            //if you return false then service call onBackgroundMessage.
-            true
-        }
-        Log.d("MyActivity",Client token: $token")
-
+class MyMessageReceiver : MessageReceiver() {
+    override fun onBackgroundMessage(context: Context?, message: JSONObject) {
+        Log.d("MyMessageReceiver", "Background message received: $message")
     }
+}
 ```
 
-```kotlin
-//OnMessage - Function for handle messages if you activity in foreground
-//return Client token
-PushedService.start(onMessage:(JSONObject)->Boolean):String?
+**Step 2.** Register your receiver in `AndroidManifest.xml`.
+
+```xml
+<application>
+    ...
+    <receiver
+        android:name=".MyMessageReceiver"                                               
+        android:enabled="true"
+        android:exported="true">
+        <intent-filter>
+            <action android:name="ru.pushed.action.MESSAGE" />
+        </intent-filter>
+    </receiver>
+    ...
+</application>
 ```
 
-For the library to work correctly, you need to call PushedService.unbind manually when the activity leaves the foreground.
+## Implementation
+
+### Initializing the Service
+
+Create an instance of `PushedService` in your Activity or Application class. Use the flags `enableFcm`, `enableHpk`, and `enableRuStore` to control which push providers are initialized.
 
 ```kotlin
-    override fun onStop() {
-        pushedService.unbindService()
-        super.onStop()
+// In your Activity's onCreate
+pushedService = PushedService(
+    context = this,
+    messageReceiverClass = MyMessageReceiver::class.java,
+    channel = "messages", // Notification channel for pushes shown by the library
+    enableFcm = true,     // Initialize FCM if its dependency is present
+    enableHpk = true,     // Initialize HPK if its dependency is present
+    enableRuStore = true  // Initialize RuStore if its dependency is present
+)
+```
+
+**Constructor Parameters:**
+*   `context`: `Context` - The application context.
+*   `messageReceiverClass`: `Class<*>?` - Your custom receiver for background messages.
+*   `channel`: `String?` - The ID of the notification channel to use. If `null`, the library will not show its own notifications.
+*   `enableLogger`: `Boolean` - Enables local logging for debugging.
+*   `askPermissions`: `Boolean` - If `true`, the library will automatically request permissions for notifications and background work on the first launch.
+*   `applicationId`: `String?` - Your Application ID from the Pushed panel.
+*   `enableFcm`: `Boolean` - Enables initialization of Firebase Cloud Messaging.
+*   `enableHpk`: `Boolean` - Enables initialization of Huawei Push Kit.
+*   `enableRuStore`: `Boolean` - Enables initialization of RuStore Push.
+
+### Handling Foreground Messages
+
+To receive messages while your app is in the foreground, call `pushedService.start()` in `onResume`.
+
+```kotlin
+override fun onResume() {
+    super.onResume()
+    // The token is your client token for sending pushes to this specific user.
+    val token = pushedService.start { message ->
+        Log.d("MyActivity", "Foreground message received: $message")
+        // Return true if the message is handled.
+        // If you return false, the library will show a notification
+        // and pass the message to your onBackgroundMessage receiver.
+        true
     }
+    Log.d("MyActivity", "Client token: $token")
+}
+```
+
+### Unbinding the Service
+
+To prevent memory leaks, unbind the service when your activity is no longer in the foreground.
+
+```kotlin
+override fun onStop() {
+    pushedService.unbindService()
+    super.onStop()
+}
+```
+
+### Requesting Permissions Manually
+
+If you set `askPermissions = false` during initialization, you can request permissions manually at any time.
+
+```kotlin
+// askNotification: Asks for permission to display notifications.
+// askBackgroundWork: Asks for permission to ignore battery optimizations.
+pushedService.askPermissions(askNotification = true, askBackgroundWork = true)
 ```
 
 

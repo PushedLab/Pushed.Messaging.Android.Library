@@ -10,6 +10,7 @@ import okio.ByteString.Companion.encode
 import org.json.JSONObject
 import java.util.Calendar
 import java.util.concurrent.TimeUnit
+import kotlin.math.pow
 
 class MessageListener (private val url : String, private val context: Context, var listener: (JSONObject)->Unit) : WebSocketListener(){
     private val tag="MessageListener"
@@ -60,13 +61,7 @@ class MessageListener (private val url : String, private val context: Context, v
     fun disconnect(dontReconnect :Boolean = false,forceDisconnect:Boolean = false){
         needReconnect=!dontReconnect
         if(activeWebSocket==null && needReconnect) connect()
-        else if(!forceDisconnect && Calendar.getInstance().timeInMillis-lastConnected<600000) {
-            PushedService.addLogEvent(context,"Reconnect postponed")
-            return
-        }
         else activeWebSocket?.cancel()
-
-
     }
     fun deactivate()
     {
@@ -106,8 +101,9 @@ class MessageListener (private val url : String, private val context: Context, v
     }
 
     override fun onClosing(webSocket: WebSocket, code: Int, reason: String) {
-        Log.d(tag,"webSocked Closing")
-        PushedService.addLogEvent(context,"webSocked Closing")
+        val logMessage = "webSocked Closing, code: $code, reason: $reason"
+        Log.d(tag, logMessage)
+        PushedService.addLogEvent(context, logMessage)
 
         disconnect()
 
@@ -115,15 +111,24 @@ class MessageListener (private val url : String, private val context: Context, v
 
     override fun onFailure(webSocket: WebSocket, t: Throwable, response: Response?) {
         lock()
-        Log.d(tag,"Err: ${t.message}")
-        PushedService.addLogEvent(context,"Err: ${t.message}")
+        val responseString = response?.toString() ?: "null"
+        val logMessage = "WebSocket Failure. Error: ${t.message}, Response: $responseString"
+        Log.e(tag, logMessage, t)
+        PushedService.addLogEvent(context, logMessage)
         listener(JSONObject("{\"ServiceStatus\":\"OFFLINE\"}"))
         activeWebSocket=null
         active=false
         retryCount++
         lastConnected=0
-        Thread.sleep(retryCount*1000L)
-        if(retryCount>=10) needReconnect=false
+
+        // Exponential backoff
+        val delay = (1000 * 2.0.pow(retryCount - 1)).toLong()
+        val cappedDelay = delay.coerceAtMost(60 * 1000L) // Cap at 60 seconds
+        val logDelayMessage = "Reconnecting in ${cappedDelay / 1000} seconds (attempt $retryCount)"
+        Log.d(tag, logDelayMessage)
+        PushedService.addLogEvent(context, logDelayMessage)
+        Thread.sleep(cappedDelay)
+
         if(needReconnect) connect()
     }
     private fun lock(){

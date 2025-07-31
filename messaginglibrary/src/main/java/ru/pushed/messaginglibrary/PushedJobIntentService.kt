@@ -56,10 +56,11 @@ class PushedJobIntentService : JobIntentService() {
                             pref.edit().putString("lastmessage",message["messageId"].toString()).apply()
                             try{
                                 val notification= JSONObject(message["pushedNotification"].toString())
-                                PushedService.showNotification(this,notification )
+                                PushedService.addLogEvent(this,"Job Delayed notification $notification")
+                                PushedService.showNotification(this,notification)
                             }
                             catch (e:Exception){
-                            PushedService.addLogEvent(this,"Notification error: ${e.message}")
+                                PushedService.addLogEvent(this,"Notification error: ${e.message}")
                             }
                             val listenerClassName= pref.getString("listenerclass",null)
                             if(listenerClassName!=null){

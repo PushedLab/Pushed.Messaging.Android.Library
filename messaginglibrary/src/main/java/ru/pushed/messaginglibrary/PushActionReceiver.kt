@@ -28,12 +28,14 @@ class PushActionReceiver : BroadcastReceiver() {
         val clickIntent: Intent? = intent.getParcelableExtra("clickIntent")
         if (clickIntent != null) {
           clickIntent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-          context.startActivity(clickIntent)
+          context.startActivity(clickIntent) 
+          send(context, messageId, "Click")
         } else {
           // fallback, если нет интента
           val fallbackIntent = context.packageManager.getLaunchIntentForPackage(context.packageName)
           fallbackIntent?.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-          context.startActivity(fallbackIntent)
+          context.startActivity(fallbackIntent) 
+          send(context, messageId, "Click")
         }
       }
 
