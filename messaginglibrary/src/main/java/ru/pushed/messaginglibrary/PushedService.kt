@@ -67,7 +67,8 @@ class PushedService(
     enableLogger:Boolean = true,
     askPermissions:Boolean = true,
     enableServerLogger:Boolean = false,
-    private val applicationId:String? = null
+    private val applicationId:String? = null,
+    private val currentSdk:String = "1.4.3"
 ) {
     private val tag="Pushed Service"
     private val pref: SharedPreferences =context.getSharedPreferences("Pushed",Context.MODE_PRIVATE)
@@ -145,12 +146,13 @@ class PushedService(
             hpkToken: String? = null,
             ruStoreToken: String? = null,
             applicationId: String? = null,
+            currentSdk: String = "1.4.3",
             callback: ((String?) -> Unit)? = null
         ) {
             addLogEvent(context, "Refresh")
             val secretPref = getSecure(context)
             val sp =context.getSharedPreferences("Pushed",Context.MODE_PRIVATE)
-            val currentSDK="1.4.3"
+            val currentSDK=currentSdk
             val currentOS="Android sdk ${Build.VERSION.SDK_INT}"
             val currentDeviceName="${android.os.Build.MANUFACTURER} ${android.os.Build.MODEL}"
 
@@ -745,7 +747,7 @@ class PushedService(
         val latch = CountDownLatch(1)
         var resultToken: String? = oldToken
 
-        refreshToken(context, oldToken, fcmToken, hpkToken, ruStoreToken, applicationId) { newToken ->
+        refreshToken(context, oldToken, fcmToken, hpkToken, ruStoreToken, applicationId, currentSdk) { newToken ->
           if (!newToken.isNullOrEmpty()) {
             resultToken = newToken
             pushedToken = newToken
@@ -758,7 +760,7 @@ class PushedService(
       }
 
       // Если уже есть старый токен — просто обновляем его асинхронно
-      refreshToken(context, oldToken, fcmToken, hpkToken, ruStoreToken, applicationId) { newToken ->
+      refreshToken(context, oldToken, fcmToken, hpkToken, ruStoreToken, applicationId, currentSdk) { newToken ->
           if (!newToken.isNullOrEmpty()) {
             pushedToken = newToken
           }
