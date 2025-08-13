@@ -4,7 +4,7 @@ plugins {
     id 'maven-publish'
 }
 group = 'com.github.PushedLab'
-version = '1.4.6'
+version = '1.4.7'
 
 android {
     namespace 'ru.pushed.messaginglibrary'
@@ -71,7 +71,7 @@ afterEvaluate {
                 from components.release
                 groupId = 'com.github.PushedLab'
                 artifactId = 'messaginglibrary'
-                version = '1.4.6'
+                version = '1.4.7'
             }
         }
     }
