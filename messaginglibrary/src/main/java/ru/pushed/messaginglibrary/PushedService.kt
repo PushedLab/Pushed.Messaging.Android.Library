@@ -365,8 +365,8 @@ class PushedService(
         }
         val dismissBroadcastIntent = PendingIntent.getBroadcast(context, id + 2000, dismissActionIntent, flags)
 
-        val title = pushedNotification.optString("Title", "")
-
+        var title = pushedNotification.optString("Title", "")
+        title = if (title != "null") title else ""
         try {
           val builder = NotificationCompat.Builder(context, channel).apply {
             setSmallIcon(iconRes)
