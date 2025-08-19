@@ -103,7 +103,8 @@ open class BackgroundService : Service(){
         token=secretPref.getString("token",null)
         Log.d(tag,"Token: $token")
         if(token!=null){
-            messageListener=MessageListener("wss://sub.pushed.ru/v2/open-websocket/$token",this){message->
+            messageListener=MessageListener("wss://sub.pushed.ru/v3/open-websocket",
+                token!!,this){ message->
                 if(message.has("ServiceStatus")){
                     if(status!= Status.valueOf(message.getString("ServiceStatus"))){
                         status=Status.valueOf(message.getString("ServiceStatus"))
