@@ -77,6 +77,7 @@ class PushedService(
     private val secretPref: SharedPreferences = getSecure(context)
     private var serviceBinder: IBackgroundServiceBinder?=null
     private var messageHandler: ((JSONObject) -> Boolean)?=null
+    private var onMessageOpenedAppHandler: ((JSONObject) -> Unit)? = null
     private var statusHandler: ((Status) -> Unit)?=null
     private var sheduled=false
     var mShouldUnbind=false
@@ -346,6 +347,7 @@ class PushedService(
           putExtra("transport", transport)
           putExtra("traceId", traceId)
           putExtra("url", url)
+          putExtra("pushedData", pushedMessage.toString())
         }
 
         val contentPendingIntent = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
@@ -678,6 +680,23 @@ class PushedService(
             addLogEvent(context, "PermissionActivity start error: ${e.message}")
         }
 
+    }
+    fun setOnMessageOpenedAppHandler(handler: (JSONObject) -> Unit) {
+        onMessageOpenedAppHandler = handler
+    }
+
+    fun checkOpenedAppMessage(activity: Activity) {
+        val pushedData = activity.intent.getStringExtra("pushedData")
+        if (pushedData != null) {
+            try {
+                val json = JSONObject(pushedData)
+                onMessageOpenedAppHandler?.invoke(json)
+                // Очищаем, чтобы не вызывать обработчик повторно
+                activity.intent.removeExtra("pushedData")
+            } catch (e: Exception) {
+                addLogEvent(context, "checkOpenedAppMessage error: ${e.message}")
+            }
+        }
     }
     fun setStatusHandler(handler: (Status)->Unit){
         statusHandler=handler
