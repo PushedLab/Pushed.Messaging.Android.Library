@@ -68,7 +68,7 @@ class PushedService(
     askPermissions:Boolean = true,
     enableServerLogger:Boolean = false,
     private val applicationId:String? = null,
-    private val currentSdk:String = "1.4.8"
+    private val currentSdk:String = "1.4.9"
 ) {
     private val tag="Pushed Service"
     private val pref: SharedPreferences =context.getSharedPreferences("Pushed",Context.MODE_PRIVATE)
@@ -160,7 +160,7 @@ class PushedService(
             var operatingSystem=sp.getString("operatingSystem",null)
             var sdkVersion=sp.getString("sdkVersion",null)
             var deviceName=sp.getString("deviceName",null)
-            val currentSDK=currentSdk ?: (sdkVersion ?: "1.4.8")
+            val currentSDK=currentSdk ?: (sdkVersion ?: "1.4.9")
             var displayPushNotificationsPermission:Boolean?=null
             var backgroundWorkPermission:Boolean?=null
             if(!oldPushedToken.isNullOrEmpty()){
