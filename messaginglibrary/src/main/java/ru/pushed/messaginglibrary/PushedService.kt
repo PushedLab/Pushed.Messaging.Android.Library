@@ -551,7 +551,7 @@ class PushedService(
         addLogEvent(context, "Initial RuStoreToken: $ruStoreToken")
         hpkToken=secretPref.getString("hpktoken",null)
         pushedToken=getNewToken()
-        addLogEvent(context,"Pushed Token: $pushedToken")
+        addLogEvent(context,"Pushed Token сheck: $pushedToken")
         val firstRun = pref.getBoolean("firstrun", true)
         if (channel != null) {
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
@@ -683,19 +683,32 @@ class PushedService(
     }
     fun setOnMessageOpenedAppHandler(handler: (JSONObject) -> Unit) {
         onMessageOpenedAppHandler = handler
+        addLogEvent(context, "setOnMessageOpenedAppHandler: handler attached")
     }
 
     fun checkOpenedAppMessage(activity: Activity) {
-        val pushedData = activity.intent.getStringExtra("pushedData")
-        if (pushedData != null) {
-            try {
-                val json = JSONObject(pushedData)
-                onMessageOpenedAppHandler?.invoke(json)
-                // Очищаем, чтобы не вызывать обработчик повторно
-                activity.intent.removeExtra("pushedData")
-            } catch (e: Exception) {
-                addLogEvent(context, "checkOpenedAppMessage error: ${e.message}")
+        try {
+            val extrasKeys = activity.intent.extras?.keySet()?.joinToString()
+            addLogEvent(context, "checkOpenedAppMessage: called on ${activity.localClassName} extrasKeys=$extrasKeys handlerPresent=${onMessageOpenedAppHandler != null}")
+
+            val pushedData = activity.intent.getStringExtra("pushedData")
+            if (pushedData == null) {
+                addLogEvent(context, "checkOpenedAppMessage: no pushedData in intent")
+                return
             }
+
+            if (onMessageOpenedAppHandler == null) {
+                addLogEvent(context, "checkOpenedAppMessage: handler is null, keeping pushedData for later delivery")
+                return
+            }
+
+            val json = JSONObject(pushedData)
+            addLogEvent(context, "checkOpenedAppMessage: delivering pushedData -> $json")
+            onMessageOpenedAppHandler?.invoke(json)
+            activity.intent.removeExtra("pushedData")
+            addLogEvent(context, "checkOpenedAppMessage: pushedData consumed and removed from intent")
+        } catch (e: Exception) {
+            addLogEvent(context, "checkOpenedAppMessage error: ${e.message}")
         }
     }
     fun setStatusHandler(handler: (Status)->Unit){
