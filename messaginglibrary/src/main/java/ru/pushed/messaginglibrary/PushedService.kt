@@ -68,7 +68,7 @@ class PushedService(
     askPermissions:Boolean = true,
     enableServerLogger:Boolean = false,
     private val applicationId:String? = null,
-    private val currentSdk:String = "1.4.8"
+    private val currentSdk:String = "1.4.9"
 ) {
     private val tag="Pushed Service"
     private val pref: SharedPreferences =context.getSharedPreferences("Pushed",Context.MODE_PRIVATE)
@@ -77,6 +77,7 @@ class PushedService(
     private val secretPref: SharedPreferences = getSecure(context)
     private var serviceBinder: IBackgroundServiceBinder?=null
     private var messageHandler: ((JSONObject) -> Boolean)?=null
+    private var onMessageOpenedAppHandler: ((JSONObject) -> Unit)? = null
     private var statusHandler: ((Status) -> Unit)?=null
     private var sheduled=false
     var mShouldUnbind=false
@@ -159,7 +160,7 @@ class PushedService(
             var operatingSystem=sp.getString("operatingSystem",null)
             var sdkVersion=sp.getString("sdkVersion",null)
             var deviceName=sp.getString("deviceName",null)
-            val currentSDK=currentSdk ?: (sdkVersion ?: "1.4.8")
+            val currentSDK=currentSdk ?: (sdkVersion ?: "1.4.9")
             var displayPushNotificationsPermission:Boolean?=null
             var backgroundWorkPermission:Boolean?=null
             if(!oldPushedToken.isNullOrEmpty()){
@@ -346,6 +347,7 @@ class PushedService(
           putExtra("transport", transport)
           putExtra("traceId", traceId)
           putExtra("url", url)
+          putExtra("pushedData", pushedMessage.toString())
         }
 
         val contentPendingIntent = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
@@ -549,7 +551,7 @@ class PushedService(
         addLogEvent(context, "Initial RuStoreToken: $ruStoreToken")
         hpkToken=secretPref.getString("hpktoken",null)
         pushedToken=getNewToken()
-        addLogEvent(context,"Pushed Token: $pushedToken")
+        addLogEvent(context,"Pushed Token сheck: $pushedToken")
         val firstRun = pref.getBoolean("firstrun", true)
         if (channel != null) {
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
@@ -678,6 +680,36 @@ class PushedService(
             addLogEvent(context, "PermissionActivity start error: ${e.message}")
         }
 
+    }
+    fun setOnMessageOpenedAppHandler(handler: (JSONObject) -> Unit) {
+        onMessageOpenedAppHandler = handler
+        addLogEvent(context, "setOnMessageOpenedAppHandler: handler attached")
+    }
+
+    fun checkOpenedAppMessage(activity: Activity) {
+        try {
+            val extrasKeys = activity.intent.extras?.keySet()?.joinToString()
+            addLogEvent(context, "checkOpenedAppMessage: called on ${activity.localClassName} extrasKeys=$extrasKeys handlerPresent=${onMessageOpenedAppHandler != null}")
+
+            val pushedData = activity.intent.getStringExtra("pushedData")
+            if (pushedData == null) {
+                addLogEvent(context, "checkOpenedAppMessage: no pushedData in intent")
+                return
+            }
+
+            if (onMessageOpenedAppHandler == null) {
+                addLogEvent(context, "checkOpenedAppMessage: handler is null, keeping pushedData for later delivery")
+                return
+            }
+
+            val json = JSONObject(pushedData)
+            addLogEvent(context, "checkOpenedAppMessage: delivering pushedData -> $json")
+            onMessageOpenedAppHandler?.invoke(json)
+            activity.intent.removeExtra("pushedData")
+            addLogEvent(context, "checkOpenedAppMessage: pushedData consumed and removed from intent")
+        } catch (e: Exception) {
+            addLogEvent(context, "checkOpenedAppMessage error: ${e.message}")
+        }
     }
     fun setStatusHandler(handler: (Status)->Unit){
         statusHandler=handler

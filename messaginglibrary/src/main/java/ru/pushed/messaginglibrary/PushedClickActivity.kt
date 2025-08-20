@@ -28,7 +28,9 @@ class PushedClickActivity : Activity() {
       Intent(Intent.ACTION_VIEW, Uri.parse(url))
         .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
     } else {
-      packageManager.getLaunchIntentForPackage(launchPkg)
+      packageManager.getLaunchIntentForPackage(launchPkg)?.apply {
+        putExtras(intent.extras ?: Bundle())
+      }
     }
 
     startActivity(target)
