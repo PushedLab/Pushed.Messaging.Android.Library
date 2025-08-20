@@ -12,7 +12,7 @@ import java.util.Calendar
 import java.util.concurrent.TimeUnit
 import kotlin.math.pow
 
-class MessageListener (private val url : String, private val context: Context, var listener: (JSONObject)->Unit) : WebSocketListener(){
+class MessageListener (private val url : String, private val pushedToken : String, private val context: Context, var listener: (JSONObject)->Unit) : WebSocketListener(){
     private val tag="MessageListener"
     private val client: OkHttpClient = OkHttpClient.Builder()
         .readTimeout(0,  TimeUnit.MILLISECONDS)
@@ -54,6 +54,7 @@ class MessageListener (private val url : String, private val context: Context, v
         active=true
         disconnect()
         val request= Request.Builder()
+            .addHeader("Authorization", "Bearer $pushedToken")
             .url(url)
             .build()
         client.newWebSocket(request,this)
@@ -61,12 +62,16 @@ class MessageListener (private val url : String, private val context: Context, v
     fun disconnect(dontReconnect :Boolean = false,forceDisconnect:Boolean = false){
         needReconnect=!dontReconnect
         if(activeWebSocket==null && needReconnect) connect()
+        else if(!forceDisconnect && Calendar.getInstance().timeInMillis-lastConnected<600000) {
+            PushedService.addLogEvent(context,"Reconnect postponed")
+            return
+        }
         else activeWebSocket?.cancel()
     }
     fun deactivate()
     {
         connectivityActive=false
-        disconnect(true,true)
+        disconnect(dontReconnect = true, forceDisconnect = true)
     }
     override fun onMessage(webSocket: WebSocket, bytes: ByteString) {
         lock()

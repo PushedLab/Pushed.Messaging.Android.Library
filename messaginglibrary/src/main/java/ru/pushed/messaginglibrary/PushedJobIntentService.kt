@@ -49,7 +49,7 @@ class PushedJobIntentService : JobIntentService() {
             val token=secretPref.getString("token",null)
             if(token!=null){
                 pref.edit().putBoolean("restarted",true).apply()
-                messageListener=MessageListener("wss://sub.pushed.ru/v2/open-websocket/$token",this){message->
+                messageListener=MessageListener("wss://sub.pushed.ru/v3/open-websocket",token,this){message->
                     PushedService.addLogEvent(this,"Intent Job Background message: $message")
                     if(!message.has("ServiceStatus")){
                         if(message["messageId"]!=pref.getString("lastmessage","")){

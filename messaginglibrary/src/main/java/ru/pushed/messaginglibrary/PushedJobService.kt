@@ -117,7 +117,7 @@ class PushedJobService : JobService(){
         val token=pref.getString("token",null)
         Log.d(tag,"Token: $token")
         if(token!=null){
-            messageListener=MessageListener("wss://sub.pushed.ru/v2/open-websocket/$token",this){message->
+            messageListener=MessageListener("wss://sub.pushed.ru/v3/open-websocket",token,this){message->
                 Log.d(tag,"Job Background message: $message")
                 PushedService.addLogEvent(this,"Job Background message: $message")
                 if(!message.has("ServiceStatus")){

@@ -68,7 +68,7 @@ class PushedService(
     askPermissions:Boolean = true,
     enableServerLogger:Boolean = false,
     private val applicationId:String? = null,
-    private val currentSdk:String = "1.4.3"
+    private val currentSdk:String = "1.4.8"
 ) {
     private val tag="Pushed Service"
     private val pref: SharedPreferences =context.getSharedPreferences("Pushed",Context.MODE_PRIVATE)
@@ -147,20 +147,20 @@ class PushedService(
             hpkToken: String? = null,
             ruStoreToken: String? = null,
             applicationId: String? = null,
-            currentSdk: String = "1.4.3",
+            currentSdk: String? = null,
             callback: ((String?) -> Unit)? = null
         ) {
             addLogEvent(context, "Refresh")
             val secretPref = getSecure(context)
             val sp =context.getSharedPreferences("Pushed",Context.MODE_PRIVATE)
-            val currentSDK=currentSdk
+
             val currentOS="Android sdk ${Build.VERSION.SDK_INT}"
             val currentDeviceName="${android.os.Build.MANUFACTURER} ${android.os.Build.MODEL}"
 
             var operatingSystem=sp.getString("operatingSystem",null)
             var sdkVersion=sp.getString("sdkVersion",null)
             var deviceName=sp.getString("deviceName",null)
-
+            val currentSDK=currentSdk ?: (sdkVersion ?: "1.4.8")
             var displayPushNotificationsPermission:Boolean?=null
             var backgroundWorkPermission:Boolean?=null
             if(!oldPushedToken.isNullOrEmpty()){
@@ -367,8 +367,8 @@ class PushedService(
         }
         val dismissBroadcastIntent = PendingIntent.getBroadcast(context, id + 2000, dismissActionIntent, flags)
 
-        val title = pushedNotification.optString("Title", "")
-
+        var title = pushedNotification.optString("Title", "")
+        title = if (title != "null") title else ""
         try {
           val builder = NotificationCompat.Builder(context, channel).apply {
             setSmallIcon(iconRes)
