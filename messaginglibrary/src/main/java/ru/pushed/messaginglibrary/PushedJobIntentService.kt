@@ -52,8 +52,7 @@ class PushedJobIntentService : JobIntentService() {
                 messageListener=MessageListener("wss://sub.pushed.ru/v3/open-websocket",token,this){message->
                     PushedService.addLogEvent(this,"Intent Job Background message: $message")
                     if(!message.has("ServiceStatus")){
-                        if(message["messageId"]!=pref.getString("lastmessage","")){
-                            pref.edit().putString("lastmessage",message["messageId"].toString()).apply()
+                        if(PushedService.checkLastMessages(this,message["messageId"].toString())){
                             try{
                                 val notification= JSONObject(message["pushedNotification"].toString())
                                 PushedService.addLogEvent(this,"Job Delayed notification $notification")

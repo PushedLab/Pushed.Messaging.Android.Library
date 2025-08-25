@@ -33,12 +33,13 @@ class BootReceiver : BroadcastReceiver(){
                         PushedService.addLogEvent(context,"Sheduled")
                 }*/
                 if(!BackgroundService.active){
-                    //pref?.edit()?.putBoolean("restarted",false)?.apply()
-                    //if(PushedJobService.startMyJob(context!!,3000,5000,1))
-                    //    PushedService.addLogEvent(context,"Alarm Sheduled")
-                    PushedService.addLogEvent(context,"Boot start JobIntent")
-                    val jobIntent = Intent(context, PushedJobIntentService::class.java)
-                    PushedJobIntentService.enqueueWork(context, jobIntent)
+                    try {
+                        PushedService.addLogEvent(context, "Boot start JobIntent")
+                        val jobIntent = Intent(context, PushedJobIntentService::class.java)
+                        PushedJobIntentService.enqueueWork(context, jobIntent)
+                    } catch (e: Exception){
+                        PushedService.addLogEvent(context,"Boot Job Err:${e.message}")
+                    }
                 }
             }
         }

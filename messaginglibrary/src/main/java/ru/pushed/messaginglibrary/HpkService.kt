@@ -35,8 +35,7 @@ class HpkService : HmsMessageService(){
                 pushedMessage.put("pushedNotification",JSONObject(notification.toString()))
             } catch (_: Exception){}
         PushedService.addLogEvent(this, "Hpk PushedMessage: $pushedMessage")
-        if(messageId!=null && messageId!=pref.getString("lastmessage","")){
-            pref.edit().putString("lastmessage",messageId).apply()
+        if(messageId!=null && PushedService.checkLastMessages(this,messageId)){
             PushedService.confirmDelivered(this,messageId,"Hpk",traceId?:"")
             if(PushedService.isApplicationForeground(this)){
                 MessageLiveData.getInstance()?.postRemoteMessage(pushedMessage)

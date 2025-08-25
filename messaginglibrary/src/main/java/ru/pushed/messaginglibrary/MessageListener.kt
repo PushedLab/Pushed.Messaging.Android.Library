@@ -137,17 +137,25 @@ class MessageListener (private val url : String, private val pushedToken : Strin
         if(needReconnect) connect()
     }
     private fun lock(){
-        if(wakeLock?.isHeld == false){
-            Log.d(tag,"Lock")
-            PushedService.addLogEvent(context,"Lock")
-            wakeLock?.acquire(60*1000)
+        try {
+            if(wakeLock?.isHeld == false){
+                Log.d(tag,"Lock")
+                PushedService.addLogEvent(context,"Lock")
+                wakeLock?.acquire(60*1000)
+            }
+        } catch (e: Exception){
+            PushedService.addLogEvent(context,"Lock Err:${e.message}")
         }
     }
     private fun unLock(){
-        if(wakeLock?.isHeld == true){
-            PushedService.addLogEvent(context,"Unlock")
-            Log.d(tag,"Unlock")
-            wakeLock?.release()
+        try {
+            if (wakeLock?.isHeld == true) {
+                PushedService.addLogEvent(context, "Unlock")
+                Log.d(tag, "Unlock")
+                wakeLock?.release()
+            }
+        } catch (e: Exception){
+            PushedService.addLogEvent(context,"Unlock Err:${e.message}")
         }
     }
 

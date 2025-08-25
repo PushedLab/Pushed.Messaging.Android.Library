@@ -116,8 +116,7 @@ open class BackgroundService : Service(){
 
                     }
                 }
-                else if(message["messageId"]!=pref.getString("lastmessage","")){
-                    pref.edit().putString("lastmessage",message["messageId"].toString()).apply()
+                else if(PushedService.checkLastMessages(this,message["messageId"].toString())){
                     var sent=false
                     synchronized(listeners){
                         if(listeners.isNotEmpty())

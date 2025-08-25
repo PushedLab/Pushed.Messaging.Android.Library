@@ -52,8 +52,7 @@ class FcmService : FirebaseMessagingService(){
             } catch (_: Exception){}
 
         PushedService.addLogEvent(this, "Fcm PushedMessage: $pushedMessage")
-        if(messageId!=null && messageId!=pref.getString("lastmessage","")){
-            pref.edit().putString("lastmessage",messageId).apply()
+        if(messageId!=null && PushedService.checkLastMessages(this,messageId)){
             PushedService.confirmDelivered(this,messageId,"Fcm",traceId?:"")
             if(PushedService.isApplicationForeground(this)){
                 MessageLiveData.getInstance()?.postRemoteMessage(pushedMessage)

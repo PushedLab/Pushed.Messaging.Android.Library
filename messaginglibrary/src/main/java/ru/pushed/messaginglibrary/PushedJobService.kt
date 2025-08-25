@@ -121,8 +121,7 @@ class PushedJobService : JobService(){
                 Log.d(tag,"Job Background message: $message")
                 PushedService.addLogEvent(this,"Job Background message: $message")
                 if(!message.has("ServiceStatus")){
-                    if(message["messageId"]!=pref.getString("lastmessage","")){
-                        pref.edit().putString("lastmessage",message["messageId"].toString()).apply()
+                    if(PushedService.checkLastMessages(this,message["messageId"].toString())){
                         try{
                             val notification= JSONObject(message["pushedNotification"].toString())
                             PushedService.showNotification(this,notification )

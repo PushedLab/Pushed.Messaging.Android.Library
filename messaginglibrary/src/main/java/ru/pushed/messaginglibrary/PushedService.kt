@@ -68,7 +68,8 @@ class PushedService(
     askPermissions:Boolean = true,
     enableServerLogger:Boolean = false,
     private val applicationId:String? = null,
-    private val currentSdk:String = "1.4.9"
+    private val currentSdk:String = "1.5.1",
+    private val enablePushOnForeground:Boolean = true
 ) {
     private val tag="Pushed Service"
     private val pref: SharedPreferences =context.getSharedPreferences("Pushed",Context.MODE_PRIVATE)
@@ -127,19 +128,42 @@ class PushedService(
     }
     companion object{
         fun getSecure(context: Context):SharedPreferences{
-            val masterKey: MasterKey = MasterKey.Builder(context)
-                .setKeyScheme(MasterKey.KeyScheme.AES256_GCM)
-                .build()
-            return EncryptedSharedPreferences.create(
-                context,
-                "SecretPushed",
-                masterKey,
-                EncryptedSharedPreferences.PrefKeyEncryptionScheme.AES256_SIV,
-                EncryptedSharedPreferences.PrefValueEncryptionScheme.AES256_GCM
-            )
-
+            try{
+                val masterKey: MasterKey = MasterKey.Builder(context)
+                    .setKeyScheme(MasterKey.KeyScheme.AES256_GCM)
+                    .build()
+                return EncryptedSharedPreferences.create(
+                    context,
+                    "SecretPushed",
+                    masterKey,
+                    EncryptedSharedPreferences.PrefKeyEncryptionScheme.AES256_SIV,
+                    EncryptedSharedPreferences.PrefValueEncryptionScheme.AES256_GCM
+                )
+            }
+            catch (e: Exception){
+                PushedService.addLogEvent(context,"Get secStorage Err:${e.message}")
+                return context.getSharedPreferences("Pushed",Context.MODE_PRIVATE)
+            }
         }
+        fun checkLastMessages(context: Context,messageId:String):Boolean{
+            var result=true
+            val sp =context.getSharedPreferences("Pushed",Context.MODE_PRIVATE)
+            val lastMessages=sp.getString("lastMessages", "")?.replace("""[ \]\[]""".toRegex(),"")?.splitToSequence(",")?.filter { it.isNotEmpty() }?.toMutableList()?: mutableListOf()
+            if(lastMessages.isEmpty()){
+                val lastMessage=sp.getString("lastmessage", "")
+                if(lastMessage?.isNotEmpty()==true){
+                    lastMessages.add(lastMessage)
+                }
+            }
+            addLogEvent(context, "Last messages: ${lastMessages}")
+            if(lastMessages.contains(messageId)) result=false
+            else lastMessages.add(messageId)
 
+            if(lastMessages.size>10) lastMessages.removeAt(0)
+            sp.edit().putString("lastMessages",lastMessages.toString().replace("""[ \]\[]""".toRegex(),"")).apply()
+            addLogEvent(context, "Last messages result : ${result}")
+            return result
+        }
         fun refreshToken(
             context: Context,
             oldPushedToken: String?,
@@ -541,7 +565,6 @@ class PushedService(
     init{
         pref.edit().putBoolean("enablelogger", enableLogger).apply()
         pref.edit().putBoolean("enableserverlogger", enableServerLogger).apply()
-
         pushedToken=secretPref.getString("token",null)
         if(pushedToken==null) pushedToken=pref.getString("token",null)
         if(pushedToken==null) pushedToken=flPref.getString("token",null)
@@ -581,17 +604,19 @@ class PushedService(
 
             messageObserver = Observer<JSONObject> { message: JSONObject? ->
                 if (messageHandler == null || messageHandler?.invoke(message!!) == false) {
-                    try {
-                        val notification = JSONObject(message!!.toString())
-                        showNotification(context, notification)
-                    } catch (e: Exception) {
-                        addLogEvent(context, "Notification error: ${e.message}")
-                    }
-                    if (messageReceiverClass != null) {
-                        val intent = Intent(context, messageReceiverClass)
-                        intent.action = "ru.pushed.action.MESSAGE"
-                        intent.putExtra("message", message.toString())
-                        context.sendBroadcast(intent)
+                    if(enablePushOnForeground) {
+                        try {
+                            val notification = JSONObject(message!!.toString())
+                            showNotification(context, notification)
+                        } catch (e: Exception) {
+                            addLogEvent(context, "Notification error: ${e.message}")
+                        }
+                        if (messageReceiverClass != null) {
+                            val intent = Intent(context, messageReceiverClass)
+                            intent.action = "ru.pushed.action.MESSAGE"
+                            intent.putExtra("message", message.toString())
+                            context.sendBroadcast(intent)
+                        }
                     }
                 }
             }
