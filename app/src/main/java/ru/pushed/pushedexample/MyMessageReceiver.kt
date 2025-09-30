@@ -1,4 +1,4 @@
-package ru.pushed.pushedexample
+package ru.pushed.pushed_demo
 
 import android.content.Context
 import androidx.core.app.NotificationCompat

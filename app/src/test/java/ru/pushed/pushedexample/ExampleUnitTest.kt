@@ -1,4 +1,4 @@
-package ru.pushed.pushedexample
+package ru.pushed.pushed_demo
 
 import org.junit.Test
 
