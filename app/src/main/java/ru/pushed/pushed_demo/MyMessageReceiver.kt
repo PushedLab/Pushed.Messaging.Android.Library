@@ -6,6 +6,11 @@ import androidx.core.app.NotificationManagerCompat
 import org.json.JSONObject
 import ru.pushed.messaginglibrary.MessageReceiver
 import ru.pushed.messaginglibrary.PushedService
+import java.lang.Exception
+import android.Manifest
+import android.content.pm.PackageManager
+import androidx.core.content.ContextCompat
+
 
 class MyMessageReceiver : MessageReceiver(){
     override fun onBackgroundMessage(context: Context?, message: JSONObject) {
@@ -19,7 +24,15 @@ class MyMessageReceiver : MessageReceiver(){
                 priority = NotificationCompat.PRIORITY_MAX
             }
             with(NotificationManagerCompat.from(context)) {
-                notify(111, builder.build())
+                if (ContextCompat.checkSelfPermission(
+                        context,
+                        Manifest.permission.POST_NOTIFICATIONS
+                    ) == PackageManager.PERMISSION_GRANTED
+                ) {
+                    notify(111, builder.build())
+                } else {
+                    PushedService.addLogEvent(context, "Notification not shown: POST_NOTIFICATIONS permission missing.")
+                }
             }
         }
         catch (e:Exception) {
