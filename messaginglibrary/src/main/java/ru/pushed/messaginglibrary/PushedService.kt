@@ -418,11 +418,24 @@ class PushedService(
       fun addLogEvent(context: Context? ,event:String){
             val sp = context?.getSharedPreferences("Pushed", Context.MODE_PRIVATE)
             if(sp?.getBoolean("enablelogger",false)==true) {
-                    val date: String = Calendar.getInstance().time.toString()
-                    val fEvent = "$date: $event\n"
-                    Log.d("PushedLogger", fEvent)
-                    val log = sp.getString("log", "")
-                    sp.edit().putString("log", log + fEvent).apply()
+                val date: String = Calendar.getInstance().time.toString()
+                val newLogLine = "$date: $event"
+                Log.d("PushedLogger", newLogLine)
+
+                val oldLog = sp.getString("log", "") ?: ""
+
+                // Split into lines, filter out empty ones to keep the list clean
+                val logLines = oldLog.split('\n').filter { it.isNotEmpty() }.toMutableList()
+                logLines.add(newLogLine)
+
+                // To prevent OutOfMemoryError, we limit the log to the last 100 entries.
+                val maxLogLines = 100
+                while (logLines.size > maxLogLines) {
+                    logLines.removeAt(0)
+                }
+
+                val newLog = logLines.joinToString("\n")
+                sp.edit().putString("log", newLog).apply()
             }
         }
         fun getLog(context: Context? ):String{
