@@ -25,7 +25,7 @@ dependencyResolutionManagement {
 
 ```gradle
 dependencies {
-    implementation 'com.github.PushedLab:Pushed.Messaging.Android.Library:1.5.5.1' // Check for the latest version
+    implementation 'com.github.PushedLab:Pushed.Messaging.Android.Library:1.5.6' // Check for the latest version
 }
 ```
 
@@ -41,14 +41,14 @@ In your app's `build.gradle`, modify the library dependency to exclude the provi
 
 ```gradle
 dependencies {
-    implementation('com.github.PushedLab:Pushed.Messaging.Android.Library:1.5.5.1') {
+    implementation('com.github.PushedLab:Pushed.Messaging.Android.Library:1.5.6') {
         // Example: Exclude HPK and RuStore, keeping only FCM
         exclude group: 'com.huawei.hms', module: 'push'
         exclude group: 'ru.rustore.sdk', module: 'pushclient'
     }
 
     // If you need to exclude FCM, you have to exclude its components too
-    implementation('com.github.PushedLab:Pushed.Messaging.Android.Library:1.5.5.1') {
+    implementation('com.github.PushedLab:Pushed.Messaging.Android.Library:1.5.6') {
         exclude group: 'com.google.firebase', module: 'firebase-messaging'
     }
 }
