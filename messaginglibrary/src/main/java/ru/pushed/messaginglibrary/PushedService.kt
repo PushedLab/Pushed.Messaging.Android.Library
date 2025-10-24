@@ -251,7 +251,7 @@ class PushedService(
 
             val body = content.toString().toRequestBody("application/json; charset=utf-8".toMediaType())
             val request = Request.Builder()
-                .url("https://sub.multipushed.ru/v2/tokens")
+                .url("https://sub.pushed.dev/v2/tokens")
                 .post(body)
                 .build()
 
@@ -461,7 +461,7 @@ class PushedService(
             val body=content.toString().toRequestBody("application/json; charset=utf-8".toMediaType())
             val client = OkHttpClient()
             val request = Request.Builder()
-                .url("https://api.multipushed.ru/v2/log")
+                .url("https://api.pushed.dev/v2/log")
                 .post(body)
                 .build()
             client.newCall(request).enqueue(object :Callback{
@@ -489,7 +489,7 @@ class PushedService(
             val body="".toRequestBody("application/json; charset=utf-8".toMediaType())
             val client = OkHttpClient()
             val request = Request.Builder()
-                .url("https://pub.multipushed.ru/v2/confirm?transportKind=$transport")
+                .url("https://pub.pushed.dev/v2/confirm?transportKind=$transport")
                 .addHeader("Authorization", basicAuth)
                 .addHeader("mf-trace-id",traceId)
                 .post(body)
