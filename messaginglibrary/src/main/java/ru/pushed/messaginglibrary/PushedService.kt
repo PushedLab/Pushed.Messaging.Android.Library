@@ -60,8 +60,30 @@ enum class Status(val value: Int){
     ACTIVE(0),OFFLINE(1),NOTACTIVE(2)
 }
 
+enum class PushedEnvironment {
+    /**
+     * Default / production environment (keeps historical hosts: pushed.ru + multipushed.ru).
+     */
+    PROD,
+    /**
+     * Development environment (pushed.dev).
+     */
+    DEV,
+    /**
+     * Load / perf environment (multipushed.online).
+     */
+    LOAD
+}
 
-class PushedService(
+private data class PushedEndpoints(
+    val wsHost: String,
+    val tokensHost: String,
+    val apiHost: String,
+    val pubHost: String
+)
+
+
+class PushedService @JvmOverloads constructor(
     private val context : Context,
     messageReceiverClass: Class<*>?,
     channel:String? = "messages",
@@ -69,7 +91,8 @@ class PushedService(
     askPermissions:Boolean = true,
     enableServerLogger:Boolean = false,
     private val applicationId:String? = null,
-    private val currentSdk:String = "1.4.9"
+    private val currentSdk:String = "1.4.9",
+    environment: PushedEnvironment? = null
 ) {
     private val tag="Pushed Service"
     private val pref: SharedPreferences =context.getSharedPreferences("Pushed",Context.MODE_PRIVATE)
@@ -127,6 +150,80 @@ class PushedService(
 
     }
     companion object{
+        private const val PREF_ENV = "pushed.environment"
+
+        private fun endpointsFor(env: PushedEnvironment): PushedEndpoints {
+            return when (env) {
+                // Historical production hosts used by the Android lib:
+                // - WebSocket: pushed.ru
+                // - Tokens + API + Pub: multipushed.ru
+                PushedEnvironment.PROD -> PushedEndpoints(
+                    wsHost = "sub.pushed.ru",
+                    tokensHost = "sub.multipushed.ru",
+                    apiHost = "api.multipushed.ru",
+                    pubHost = "pub.multipushed.ru"
+                )
+
+                // Dev environment: pushed.dev (same subdomains)
+                PushedEnvironment.DEV -> PushedEndpoints(
+                    wsHost = "sub.pushed.dev",
+                    tokensHost = "sub.pushed.dev",
+                    apiHost = "api.pushed.dev",
+                    pubHost = "pub.pushed.dev"
+                )
+
+                // Load environment: multipushed.online (same subdomains)
+                PushedEnvironment.LOAD -> PushedEndpoints(
+                    wsHost = "sub.multipushed.online",
+                    tokensHost = "sub.multipushed.online",
+                    apiHost = "api.multipushed.online",
+                    pubHost = "pub.multipushed.online"
+                )
+            }
+        }
+
+        fun setEnvironment(context: Context, env: PushedEnvironment) {
+            context.getSharedPreferences("Pushed", Context.MODE_PRIVATE)
+                .edit()
+                .putString(PREF_ENV, env.name)
+                .apply()
+        }
+
+        fun getEnvironment(context: Context): PushedEnvironment {
+            val raw = context.getSharedPreferences("Pushed", Context.MODE_PRIVATE)
+                .getString(PREF_ENV, null)
+                ?: return PushedEnvironment.PROD
+            return try {
+                PushedEnvironment.valueOf(raw)
+            } catch (_: Exception) {
+                PushedEnvironment.PROD
+            }
+        }
+
+        fun getWebSocketUrl(context: Context): String {
+            val ep = endpointsFor(getEnvironment(context))
+            return "wss://${ep.wsHost}/v3/open-websocket"
+        }
+
+        fun getTokensUrl(context: Context): String {
+            val ep = endpointsFor(getEnvironment(context))
+            return "https://${ep.tokensHost}/v2/tokens"
+        }
+
+        fun getServerLogUrl(context: Context): String {
+            val ep = endpointsFor(getEnvironment(context))
+            return "https://${ep.apiHost}/v2/log"
+        }
+
+        fun getConfirmDeliveredUrl(context: Context, transport: String): String {
+            val ep = endpointsFor(getEnvironment(context))
+            return "https://${ep.pubHost}/v2/confirm?transportKind=$transport"
+        }
+
+        fun getInteractionUrl(context: Context, interaction: String): String {
+            val ep = endpointsFor(getEnvironment(context))
+            return "https://${ep.apiHost}/v2/mobile-push/confirm-client-interaction?clientInteraction=$interaction"
+        }
 
         fun getSecure(context: Context):SharedPreferences{
             try{
@@ -251,7 +348,7 @@ class PushedService(
 
             val body = content.toString().toRequestBody("application/json; charset=utf-8".toMediaType())
             val request = Request.Builder()
-                .url("https://sub.multipushed.ru/v2/tokens")
+                .url(getTokensUrl(context))
                 .post(body)
                 .build()
 
@@ -461,7 +558,7 @@ class PushedService(
             val body=content.toString().toRequestBody("application/json; charset=utf-8".toMediaType())
             val client = OkHttpClient()
             val request = Request.Builder()
-                .url("https://api.multipushed.ru/v2/log")
+                .url(getServerLogUrl(context))
                 .post(body)
                 .build()
             client.newCall(request).enqueue(object :Callback{
@@ -489,7 +586,7 @@ class PushedService(
             val body="".toRequestBody("application/json; charset=utf-8".toMediaType())
             val client = OkHttpClient()
             val request = Request.Builder()
-                .url("https://pub.multipushed.ru/v2/confirm?transportKind=$transport")
+                .url(getConfirmDeliveredUrl(context, transport))
                 .addHeader("Authorization", basicAuth)
                 .addHeader("mf-trace-id",traceId)
                 .post(body)
@@ -583,6 +680,10 @@ class PushedService(
     }
 
     init{
+        // Persist environment early so BackgroundService/Jobs/Receivers can resolve the same URLs.
+        val resolvedEnv = environment ?: getEnvironment(context)
+        setEnvironment(context, resolvedEnv)
+
         pref.edit().putBoolean("enablelogger", enableLogger).apply()
         pref.edit().putBoolean("enableserverlogger", enableServerLogger).apply()
 

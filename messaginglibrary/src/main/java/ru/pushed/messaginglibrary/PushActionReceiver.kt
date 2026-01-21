@@ -69,7 +69,7 @@ class PushActionReceiver : BroadcastReceiver() {
       }
 
       val basicAuth = "Basic " + Base64.encodeToString("$token:$messageId".toByteArray(), Base64.NO_WRAP)
-      val url = "https://api.multipushed.ru/v2/mobile-push/confirm-client-interaction?clientInteraction=$interaction"
+      val url = PushedService.getInteractionUrl(context, interaction)
 
       PushedService.addLogEvent(context, "Sending interaction [$interaction] to $url")
 
