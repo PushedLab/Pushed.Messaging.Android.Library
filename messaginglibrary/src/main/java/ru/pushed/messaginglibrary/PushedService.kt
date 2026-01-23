@@ -244,6 +244,58 @@ class PushedService @JvmOverloads constructor(
             }
         }
 
+        /**
+         * Clears the saved Pushed client token from all storages.
+         * After calling this method, the next initialization of PushedService
+         * will request a new token from the server.
+         *
+         * Use this for testing or when you need to re-register the device.
+         */
+        fun clearToken(context: Context) {
+            addLogEvent(context, "Clearing Pushed token")
+
+            // Clear from encrypted storage (SecretPushed)
+            try {
+                val secretPref = getSecure(context)
+                secretPref.edit().apply {
+                    remove("token")
+                    remove("fcmtoken")
+                    remove("hpktoken")
+                    remove("rustoretoken")
+                    apply()
+                }
+                addLogEvent(context, "Token removed from SecretPushed")
+            } catch (e: Exception) {
+                addLogEvent(context, "Failed to clear SecretPushed: ${e.message}")
+            }
+
+            // Clear from regular SharedPreferences (Pushed)
+            try {
+                val pref = context.getSharedPreferences("Pushed", Context.MODE_PRIVATE)
+                pref.edit().apply {
+                    remove("token")
+                    apply()
+                }
+                addLogEvent(context, "Token removed from Pushed prefs")
+            } catch (e: Exception) {
+                addLogEvent(context, "Failed to clear Pushed prefs: ${e.message}")
+            }
+
+            // Clear from legacy SharedPreferences (pushed - lowercase)
+            try {
+                val flPref = context.getSharedPreferences("pushed", Context.MODE_PRIVATE)
+                flPref.edit().apply {
+                    remove("token")
+                    apply()
+                }
+                addLogEvent(context, "Token removed from pushed (legacy) prefs")
+            } catch (e: Exception) {
+                addLogEvent(context, "Failed to clear pushed (legacy) prefs: ${e.message}")
+            }
+
+            addLogEvent(context, "Token cleared successfully")
+        }
+
         fun refreshToken(
             context: Context,
             oldPushedToken: String?,
@@ -367,6 +419,7 @@ class PushedService @JvmOverloads constructor(
                     }
 
                     val responseBody = response.body?.string()
+                    addLogEvent(context, "refreshToken response body: ${responseBody ?: "null"}")
                     try {
                         val model = JSONObject(responseBody!!)["model"] as JSONObject
                         val newToken = model.optString("clientToken", "")
