@@ -4,8 +4,8 @@ plugins {
     id 'maven-publish'  
     
 }
-group = 'com.github.PushedLab'
-version = '1.5.7'
+group = (findProperty("group") ?: "com.github.PushedLab").toString()
+version = (findProperty("version") ?: "1.5.7").toString()
 
 android {
     namespace 'ru.pushed.messaginglibrary'
@@ -84,9 +84,9 @@ afterEvaluate {
             // Creates a Maven publication called "release".
             release(MavenPublication) {
                 from components.release
-                groupId = 'com.github.PushedLab'
+                groupId = project.group.toString()
                 artifactId = 'messaginglibrary'
-                version = '1.5.7'
+                version = project.version.toString()
             }
         }
     }
