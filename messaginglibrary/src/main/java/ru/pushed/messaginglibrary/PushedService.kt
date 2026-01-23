@@ -627,8 +627,16 @@ class PushedService @JvmOverloads constructor(
         }
         fun isFcmHandledExternally(context: Context): Boolean {
             val intent = Intent("com.google.firebase.MESSAGING_EVENT")
+            intent.setPackage(context.packageName) // Search only within our app
             val resolveInfoList: List<ResolveInfo> = context.packageManager.queryIntentServices(intent, 0)
-            return resolveInfoList.isNotEmpty()
+
+            // Filter out our own service and the default FCM service stub to check for other FCM handlers
+            val externalServices = resolveInfoList.filter { serviceInfo ->
+                val serviceName = serviceInfo.serviceInfo.name
+                serviceName != FcmService::class.java.name && serviceName != "com.google.firebase.messaging.FirebaseMessagingService"
+            }
+
+            return externalServices.isNotEmpty()
         }
         fun checkLastMessages(context: Context,messageId:String):Boolean{
             var result=true
