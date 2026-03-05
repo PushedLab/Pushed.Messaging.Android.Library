@@ -27,6 +27,17 @@ class PushedJobIntentService : JobIntentService() {
         }
     }
     override fun onHandleWork(intent: Intent) {
+        val defaultHandler = Thread.currentThread().uncaughtExceptionHandler
+        Thread.currentThread().uncaughtExceptionHandler = Thread.UncaughtExceptionHandler { thread, throwable ->
+            if (throwable is RuntimeException &&
+                throwable.cause is SecurityException &&
+                throwable.cause?.message?.contains("cancelled due to doze") == true
+            ) {
+                Log.w("PushedJobIntentService", "Suppressed Doze SecurityException", throwable)
+            } else {
+                defaultHandler?.uncaughtException(thread, throwable)
+            }
+        }
         watchdogReceiver.enqueue(this,60000)
         //activeJob=this
         if(BackgroundService.active){
