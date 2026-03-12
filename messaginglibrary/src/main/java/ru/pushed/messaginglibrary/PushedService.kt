@@ -151,6 +151,24 @@ class PushedService @JvmOverloads constructor(
     }
     companion object{
         private const val PREF_ENV = "pushed.environment"
+        @Volatile private var dozeHandlerInstalled = false
+
+        @JvmStatic
+        fun installDozeExceptionHandler() {
+            if (dozeHandlerInstalled) return
+            dozeHandlerInstalled = true
+            val previousHandler = Thread.getDefaultUncaughtExceptionHandler()
+            Thread.setDefaultUncaughtExceptionHandler { thread, throwable ->
+                if (throwable is RuntimeException &&
+                    throwable.cause is SecurityException &&
+                    throwable.cause?.message?.contains("cancelled due to doze") == true
+                ) {
+                    Log.d("PushedJobIntentService", "Suppressed Doze SecurityException", throwable)
+                } else {
+                    previousHandler?.uncaughtException(thread, throwable)
+                }
+            }
+        }
 
         private fun endpointsFor(env: PushedEnvironment): PushedEndpoints {
             return when (env) {
@@ -741,6 +759,8 @@ class PushedService @JvmOverloads constructor(
     }
 
     init{
+        installDozeExceptionHandler()
+
         // Persist environment early so BackgroundService/Jobs/Receivers can resolve the same URLs.
         val resolvedEnv = environment ?: getEnvironment(context)
         setEnvironment(context, resolvedEnv)
