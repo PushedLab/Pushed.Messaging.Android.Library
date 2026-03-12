@@ -5,7 +5,7 @@ plugins {
     
 }
 group = (findProperty("group") ?: "com.github.PushedLab").toString()
-version = (findProperty("version") ?: "1.5.7").toString()
+version = (findProperty("version") ?: "1.5.7.4").toString()
 
 android {
     namespace 'ru.pushed.messaginglibrary'
