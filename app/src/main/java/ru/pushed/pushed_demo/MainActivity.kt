@@ -7,91 +7,78 @@ import android.content.ClipData
 import android.content.ClipboardManager
 import android.content.pm.PackageManager
 import android.os.Build
-import androidx.appcompat.app.AppCompatActivity
 import android.os.Bundle
-import android.os.StrictMode
-import android.util.Log
-import android.widget.Button
-import android.widget.TextView
 import android.widget.Toast
-import androidx.activity.result.contract.ActivityResultContracts
+import androidx.activity.ComponentActivity
+import androidx.activity.compose.setContent
+import androidx.activity.viewModels
 import androidx.core.content.ContextCompat
-import org.json.JSONObject
-import ru.pushed.messaginglibrary.BackgroundService
-import ru.pushed.messaginglibrary.PushedService
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import androidx.compose.runtime.getValue
+import ru.pushed.pushed_demo.ui.MainViewModel
+import ru.pushed.pushed_demo.ui.PushedDemoScreen
+import ru.pushed.pushed_demo.ui.theme.PushedDemoTheme
 
+class MainActivity : ComponentActivity() {
 
-class MainActivity : AppCompatActivity() {
-    private lateinit var titleText: TextView
-    private lateinit var bodyText: TextView
-    private lateinit var restartButton: Button
-    private lateinit var getLogsButton: Button
-    private lateinit var pushedService:PushedService
-    private lateinit var tokenText:TextView
-    private var token:String?=""
+    private val viewModel: MainViewModel by viewModels()
 
-    override fun onStop() {
-        pushedService.unbindService()
-        super.onStop()
+    override fun onCreate(savedInstanceState: Bundle?) {
+        super.onCreate(savedInstanceState)
+
+        setupNotificationChannel()
+        requestNotificationPermission()
+
+        setContent {
+            val state by viewModel.state.collectAsStateWithLifecycle()
+            PushedDemoTheme {
+                PushedDemoScreen(
+                    state       = state,
+                    onCopyToken = {
+                        copyToClipboard("pushed_token", state.token ?: "")
+                        Toast.makeText(this, "Token copied", Toast.LENGTH_SHORT).show()
+                    },
+                    onCopyLogs  = {
+                        copyToClipboard("pushed_logs", viewModel.getLogs())
+                        Toast.makeText(this, "Logs copied", Toast.LENGTH_SHORT).show()
+                    }
+                )
+            }
+        }
     }
 
     override fun onResume() {
         super.onResume()
-        token=pushedService.start(){message ->
-            PushedService.addLogEvent(this ,"DEMO FG: $message")
-            try {
-                val pushedNotification = message.getJSONObject("pushedNotification")
-                runOnUiThread{
-                    titleText.text=pushedNotification.getString("Title")
-                    bodyText.text=pushedNotification.getString("Body")
-                }
-                true
-            }
-            catch (e:Exception) {false}
-
-        }
-        tokenText.text="Token: $token"
-        PushedService.addLogEvent(this ,"Token: $token")
-
+        viewModel.start()
     }
-    override fun onCreate(savedInstanceState: Bundle?) {
-        super.onCreate(savedInstanceState)
-        setContentView(R.layout.activity_main)
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-            val notificationChannel= NotificationChannel("messages","Messages", NotificationManager.IMPORTANCE_HIGH)
-            val notificationManager=getSystemService(NotificationManager::class.java)
-            notificationManager.createNotificationChannel(notificationChannel)
-        }
-        titleText=findViewById(R.id.title_text_view)
-        bodyText=findViewById(R.id.body_text_view)
-        restartButton=findViewById(R.id.restart_button)
-        getLogsButton=findViewById(R.id.get_logs_button)
-        tokenText=findViewById(R.id.token_text_view)
 
+    override fun onStop() {
+        viewModel.unbind()
+        super.onStop()
+    }
+
+    private fun copyToClipboard(label: String, text: String) {
+        val cb = getSystemService(CLIPBOARD_SERVICE) as ClipboardManager
+        cb.setPrimaryClip(ClipData.newPlainText(label, text))
+    }
+
+    private fun setupNotificationChannel() {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            val channel = NotificationChannel(
+                "messages", "Messages", NotificationManager.IMPORTANCE_HIGH
+            )
+            getSystemService(NotificationManager::class.java).createNotificationChannel(channel)
+        }
+    }
+
+    private fun requestNotificationPermission() {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-            if (ContextCompat.checkSelfPermission(this,Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED) {
-                requestPermissions(arrayOf(Manifest.permission.POST_NOTIFICATIONS), 1);
+            if (ContextCompat.checkSelfPermission(
+                    this, Manifest.permission.POST_NOTIFICATIONS
+                ) != PackageManager.PERMISSION_GRANTED
+            ) {
+                requestPermissions(arrayOf(Manifest.permission.POST_NOTIFICATIONS), 1)
             }
         }
-        pushedService = PushedService(
-            this,
-            MyMessageReceiver::class.java,
-        )
-
-        restartButton.setOnClickListener{
-            var myClipboard = getSystemService(CLIPBOARD_SERVICE) as ClipboardManager
-            val clip: ClipData = ClipData.newPlainText("simple text", token)
-            myClipboard.setPrimaryClip(clip)
-
-        }
-
-        getLogsButton.setOnClickListener {
-            val logs = PushedService.getLog(this)
-            val clipboard = getSystemService(CLIPBOARD_SERVICE) as ClipboardManager
-            val clip = ClipData.newPlainText("Pushed Logs", logs)
-            clipboard.setPrimaryClip(clip)
-            Toast.makeText(this, "Logs copied to clipboard", Toast.LENGTH_SHORT).show()
-        }
-
     }
 }

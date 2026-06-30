@@ -55,6 +55,10 @@ import java.util.Locale
 import java.util.concurrent.CountDownLatch
 import android.app.ActivityOptions
 import android.content.pm.ResolveInfo
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 
 enum class Status(val value: Int){
     ACTIVE(0),OFFLINE(1),NOTACTIVE(2)
@@ -91,7 +95,7 @@ class PushedService @JvmOverloads constructor(
     askPermissions:Boolean = true,
     enableServerLogger:Boolean = false,
     private val applicationId:String? = null,
-    private val currentSdk:String = "1.4.9",
+    private val currentSdk:String = "1.5.8",
     environment: PushedEnvironment? = null
 ) {
     private val tag="Pushed Service"
@@ -114,6 +118,7 @@ class PushedService @JvmOverloads constructor(
 
     private val messageLiveData=MessageLiveData.getInstance()
     private var messageObserver:Observer<JSONObject>?=null
+    @Volatile private var pendingStart = false
     private val binderId= (System.currentTimeMillis()/1000).toInt()
     private  val serviceConnection: ServiceConnection =object: ServiceConnection{
         override fun onServiceConnected(name: ComponentName?, service: IBinder?) {
@@ -776,8 +781,6 @@ class PushedService @JvmOverloads constructor(
         ruStoreToken=secretPref.getString("rustoretoken",null)
         addLogEvent(context, "Initial RuStoreToken: $ruStoreToken")
         hpkToken=secretPref.getString("hpktoken",null)
-        pushedToken=getNewToken()
-        addLogEvent(context,"Pushed Token сheck: $pushedToken")
         val firstRun = pref.getBoolean("firstrun", true)
         if (channel != null) {
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
@@ -797,103 +800,118 @@ class PushedService @JvmOverloads constructor(
                 addLogEvent(context, "PermissionActivity start error: ${e.message}")
             }
         }
-
         pref.edit().putBoolean("firstrun", false).apply()
-        if (pushedToken != null) {
-            status = Status.OFFLINE
-            pref.edit().putString("listenerclass", messageReceiverClass?.name).apply()
-            pref.edit().putString("channel", channel).apply()
-            pref.edit().putBoolean("enablelogger", enableLogger).apply()
 
-            messageObserver = Observer<JSONObject> { message: JSONObject? ->
-                if (messageHandler == null || messageHandler?.invoke(message!!) == false) {
-                    try {
-                        val notification = JSONObject(message!!.toString())
-                        showNotification(context, notification)
-                    } catch (e: Exception) {
-                        addLogEvent(context, "Notification error: ${e.message}")
-                    }
-                    if (messageReceiverClass != null) {
-                        val intent = Intent(context, messageReceiverClass)
-                        intent.action = "ru.pushed.action.MESSAGE"
-                        intent.putExtra("message", message.toString())
-                        context.sendBroadcast(intent)
-                    }
-                }
-            }
-            messageLiveData?.observeForever(messageObserver!!)
-            //Fcm (optional)
-            if(isFcmPresent()) {
-                if (isFcmHandledExternally(context)) {
-                    addLogEvent(context, "External FCM service found, skipping Pushed FCM initialization.")
-                }
-                else {
-                    addLogEvent(context, "Fcm dependency found. Initializing.")
-                    try {
-                        FirebaseMessaging.getInstance().token.addOnCompleteListener { task ->
-                            if (task.isSuccessful) {
-                                addLogEvent(context, "Fcm Token: ${task.result}, $fcmToken")
-                                if (fcmToken != task.result) {
-                                    fcmToken = task.result
-                                    getNewToken()
-                                }
-                            } else {
-                                addLogEvent(context, "Cant init Fcm")
+        // Token fetch runs on IO thread to avoid blocking the main thread (ANR fix).
+        CoroutineScope(Dispatchers.IO).launch {
+            pushedToken = getNewToken()
+            addLogEvent(context, "Pushed Token сheck: $pushedToken")
+
+            if (pushedToken != null) {
+                status = Status.OFFLINE
+                pref.edit().putString("listenerclass", messageReceiverClass?.name).apply()
+                pref.edit().putString("channel", channel).apply()
+                pref.edit().putBoolean("enablelogger", enableLogger).apply()
+
+                // observeForever requires the main thread
+                withContext(Dispatchers.Main) {
+                    messageObserver = Observer<JSONObject> { message: JSONObject? ->
+                        if (messageHandler == null || messageHandler?.invoke(message!!) == false) {
+                            try {
+                                val notification = JSONObject(message!!.toString())
+                                showNotification(context, notification)
+                            } catch (e: Exception) {
+                                addLogEvent(context, "Notification error: ${e.message}")
+                            }
+                            if (messageReceiverClass != null) {
+                                val intent = Intent(context, messageReceiverClass)
+                                intent.action = "ru.pushed.action.MESSAGE"
+                                intent.putExtra("message", message.toString())
+                                context.sendBroadcast(intent)
                             }
                         }
-                    } catch (e: Exception) {
-                        addLogEvent(context, "Fcm init Error: ${e.message}")
                     }
+                    messageLiveData?.observeForever(messageObserver!!)
                 }
-            } else {
-                addLogEvent(context, "Fcm dependency not found. Skipping initialization.")
-            }
 
-            //RuStore (optional)
-            if(isRuStorePresent()) {
-                addLogEvent(context, "RuStore dependency found. Initializing.")
-                try {
-                    RuStorePushClient.getToken().addOnSuccessListener { token: String ->
-                        addLogEvent(context, "RuStore Token: $token")
-                        if(token!=ruStoreToken){
-                            ruStoreToken = token
-                            getNewToken()
-                        }
+                //Fcm (optional)
+                if(isFcmPresent()) {
+                    if (isFcmHandledExternally(context)) {
+                        addLogEvent(context, "External FCM service found, skipping Pushed FCM initialization.")
                     }
-                } catch (e: Exception) {
-                    addLogEvent(context, "RuStore init Error: ${e.message}")
-                }
-            } else {
-                addLogEvent(context, "RuStore dependency not found. Skipping initialization.")
-            }
-
-            //Hpk (optional)
-            if(isHpkPresent()) {
-                addLogEvent(context, "Hpk dependency found. Initializing.")
-                try{
-                    val hmsResult=HuaweiApiAvailability.getInstance().isHuaweiMobileServicesAvailable(context)
-                    addLogEvent(context, "HMS Core: $hmsResult")
-                    if(hmsResult==0) {
-                        object : Thread(){
-                            override fun run() {
-                                try{
-                                    val token = HmsInstanceId.getInstance(context).getToken("","HCM")
-                                    addLogEvent(context, "Hpk Token: $token")
-                                    if(token!=hpkToken) {
-                                        hpkToken=token
+                    else {
+                        addLogEvent(context, "Fcm dependency found. Initializing.")
+                        try {
+                            FirebaseMessaging.getInstance().token.addOnCompleteListener { task ->
+                                if (task.isSuccessful) {
+                                    addLogEvent(context, "Fcm Token: ${task.result}, $fcmToken")
+                                    if (fcmToken != task.result) {
+                                        fcmToken = task.result
                                         getNewToken()
                                     }
-                                } catch(e: Exception){
-                                    addLogEvent(context, "Hpk init Error: ${e.message}")
+                                } else {
+                                    addLogEvent(context, "Cant init Fcm")
                                 }
                             }
-                        }.start()
+                        } catch (e: Exception) {
+                            addLogEvent(context, "Fcm init Error: ${e.message}")
+                        }
                     }
-                } catch (e:Exception){
-                    addLogEvent(context, "HMS Core init Error: ${e.message}")
+                } else {
+                    addLogEvent(context, "Fcm dependency not found. Skipping initialization.")
                 }
-            } else {
-                addLogEvent(context, "Hpk dependency not found. Skipping initialization.")
+
+                //RuStore (optional)
+                if(isRuStorePresent()) {
+                    addLogEvent(context, "RuStore dependency found. Initializing.")
+                    try {
+                        RuStorePushClient.getToken().addOnSuccessListener { token: String ->
+                            addLogEvent(context, "RuStore Token: $token")
+                            if(token!=ruStoreToken){
+                                ruStoreToken = token
+                                getNewToken()
+                            }
+                        }
+                    } catch (e: Exception) {
+                        addLogEvent(context, "RuStore init Error: ${e.message}")
+                    }
+                } else {
+                    addLogEvent(context, "RuStore dependency not found. Skipping initialization.")
+                }
+
+                //Hpk (optional)
+                if(isHpkPresent()) {
+                    addLogEvent(context, "Hpk dependency found. Initializing.")
+                    try{
+                        val hmsResult=HuaweiApiAvailability.getInstance().isHuaweiMobileServicesAvailable(context)
+                        addLogEvent(context, "HMS Core: $hmsResult")
+                        if(hmsResult==0) {
+                            try {
+                                val token = HmsInstanceId.getInstance(context).getToken("","HCM")
+                                addLogEvent(context, "Hpk Token: $token")
+                                if(token!=hpkToken) {
+                                    hpkToken=token
+                                    getNewToken()
+                                }
+                            } catch(e: Exception){
+                                addLogEvent(context, "Hpk init Error: ${e.message}")
+                            }
+                        }
+                    } catch (e:Exception){
+                        addLogEvent(context, "HMS Core init Error: ${e.message}")
+                    }
+                } else {
+                    addLogEvent(context, "Hpk dependency not found. Skipping initialization.")
+                }
+
+                // If start() was called before token was ready, auto-start now
+                if (pendingStart) {
+                    pendingStart = false
+                    withContext(Dispatchers.Main) {
+                        addLogEvent(context, "Auto-starting WebSocket (deferred start)")
+                        startInternal()
+                    }
+                }
             }
         }
     }
@@ -971,8 +989,16 @@ class PushedService @JvmOverloads constructor(
 
     }
     fun start(onMessage:((JSONObject)->Boolean)?):String? {
-        if(pushedToken==null) return null
-        messageHandler=onMessage
+        messageHandler = onMessage
+        if (pushedToken == null) {
+            // Token not ready yet (async init in progress) — auto-start when coroutine finishes
+            pendingStart = true
+            return null
+        }
+        return startInternal()
+    }
+
+    private fun startInternal(): String? {
         val serviceIntent=Intent(context,BackgroundService::class.java)
         serviceIntent.putExtra("binder_id", binderId)
         context.startService(serviceIntent)
@@ -982,8 +1008,6 @@ class PushedService @JvmOverloads constructor(
             PushedJobIntentService.deactivateJob()
             val jobIntent = Intent(context, PushedJobIntentService::class.java)
             PushedJobIntentService.enqueueWork(context, jobIntent)
-            //PushedJobService.stopActiveJob(context)
-            //PushedJobService.startMyJob(context,3000,5000,1)
         }
         pref.edit().putBoolean("restarted",false).apply()
         return pushedToken
